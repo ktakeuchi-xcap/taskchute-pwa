@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:host": "vite --host",
+    "dev:tunnel": "cloudflared tunnel --url http://localhost:5173",
+    "lan-ip": "ipconfig getifaddr en0 || ipconfig getifaddr en1 || echo 'No LAN IP found'",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",

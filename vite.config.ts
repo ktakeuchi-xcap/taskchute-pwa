@@ -5,6 +5,15 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   base: './',
+  server: {
+    port: 5173,
+    strictPort: true,
+    // Allow access via Cloudflare Tunnel and other tunneling services.
+    allowedHosts: ['.trycloudflare.com', '.ngrok-free.app', '.ngrok.io', '.loca.lt'],
+  },
+  preview: {
+    port: 4173,
+  },
   plugins: [
     react(),
     VitePWA({

@@ -95,14 +95,72 @@ taskchute-pwa/
 
 | Phase | 内容 | ステータス |
 |-------|------|----------|
-| 0. 設計レビュー | 本ドキュメント一式の作成・承認 | **進行中** |
-| 1. 環境構築 | Vite + React + TS + Tailwind スキャフォールド | 未着手 |
+| 0. 設計レビュー | 本ドキュメント一式の作成・承認 | **完了** |
+| 1. 環境構築 | Vite + React + TS + Tailwind スキャフォールド | **完了** |
 | 2. 認証実装 | Google OAuth 接続・スコープ取得 | 未着手 |
 | 3. コア機能 | タスク CRUD + タスクシュート（開始/終了） | 未着手 |
 | 4. 同期機能 | Calendar/Tasks 同期 + ルーチン生成 | 未着手 |
 | 5. PWA 化 | Service Worker・オフライン・インストール対応 | 未着手 |
 | 6. テスト | 単体・結合・E2E | 未着手 |
 | 7. デプロイ | 本番環境へのリリース・移行 | 未着手 |
+
+---
+
+## ローカル開発
+
+```bash
+npm install         # 初回のみ
+npm run dev         # http://localhost:5173 で起動（自分のPCのみ）
+npm run typecheck   # tsc -b --noEmit
+npm run lint        # ESLint
+npm run test        # Vitest
+npm run build       # 本番ビルド
+```
+
+---
+
+## スマホ実機テスト（開発時）
+
+スマホからアプリの動作を確認する方法は 2 種類。用途で使い分ける。
+
+### 方法 1: 同一 Wi-Fi の LAN 直アクセス（UIだけ見たいとき）
+
+```bash
+npm run lan-ip      # 例: 192.168.1.42
+npm run dev:host    # 0.0.0.0:5173 で起動
+```
+
+スマホで `http://192.168.1.42:5173/` を開く。
+
+**制約**: HTTPS ではないため Google OAuth は動作しない。UI レイアウト・タッチ操作の確認のみ。
+
+### 方法 2: Cloudflare Tunnel で HTTPS 経由（OAuth テストもしたいとき）
+
+事前に `cloudflared` を入れる（無料、Cloudflare アカウント不要）：
+
+```bash
+brew install cloudflared
+```
+
+2 つのターミナルで並行起動：
+
+```bash
+# Terminal A
+npm run dev
+
+# Terminal B
+npm run dev:tunnel
+# → https://xxxx-xxxx.trycloudflare.com が発行される
+```
+
+スマホでその URL を開く。OAuth 動作確認可。
+
+> **注意**: 起動のたびにトンネル URL が変わるため、Google Cloud Console の「承認済みの JavaScript 生成元」に毎回追加する必要がある。本格的な実機 OAuth テストは M7 デプロイ後の GitHub Pages URL を使うのが楽。
+
+### PWA としてインストール
+
+- **iOS Safari**: 共有ボタン →「ホーム画面に追加」
+- **Android Chrome**: メニュー →「アプリをインストール」
 
 各フェーズの詳細は [docs/06_開発計画書.md](./docs/06_開発計画書.md) を参照。
 
@@ -121,3 +179,4 @@ taskchute-pwa/
 | 日付 | バージョン | 内容 | 担当 |
 |------|----------|------|------|
 | 2026-05-19 | 0.1 | 初版作成・設計レビュー用 | 竹内 |
+| 2026-05-19 | 0.2 | M1 環境構築完了。スマホ要件を必須化、実機テスト手順追加 | 竹内 |
