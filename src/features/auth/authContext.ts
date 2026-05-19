@@ -6,7 +6,15 @@ export interface AuthContextValue {
   state: AuthState;
 }
 
+const INITIAL_STATE: AuthState = {
+  status: 'initializing',
+  accessToken: null,
+  expiresAt: null,
+  userEmail: null,
+  error: null,
+};
+
 export const AuthContext = createContext<AuthContextValue>({
   client: null,
-  state: { accessToken: null, expiresAt: null, userEmail: null },
+  state: INITIAL_STATE,
 });

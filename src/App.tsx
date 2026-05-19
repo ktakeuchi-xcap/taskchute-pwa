@@ -1,5 +1,6 @@
 import { useUIStore } from '@/store/uiStore';
 import { AppShell } from '@/components/AppShell';
+import { AuthGate } from '@/features/auth/AuthGate';
 import { TodayRoute } from '@/routes/TodayRoute';
 import { AddRoute } from '@/routes/AddRoute';
 import { WaitingRoute } from '@/routes/WaitingRoute';
@@ -16,8 +17,10 @@ export default function App() {
   const tab = useUIStore((s) => s.currentTab);
   const Route = ROUTES[tab];
   return (
-    <AppShell>
-      <Route />
-    </AppShell>
+    <AuthGate>
+      <AppShell>
+        <Route />
+      </AppShell>
+    </AuthGate>
   );
 }
