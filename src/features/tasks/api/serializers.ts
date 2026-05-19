@@ -1,0 +1,107 @@
+import type { Task, TaskStatus } from '@/features/tasks/types';
+import { TaskStatus as TaskStatusValues } from '@/features/tasks/types';
+import { parseSheetDateCell, formatDateForSheet } from '@/lib/google/sheetDate';
+import { buildHeaderIndex, TASKDB_HEADERS } from './headers';
+
+const STATUS_VALUES: ReadonlySet<string> = new Set<TaskStatus>(Object.values(TaskStatusValues));
+
+function asString(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  return typeof value === 'string' ? value : String(value);
+}
+
+function asNumber(value: unknown): number {
+  if (value === null || value === undefined || value === '') return 0;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function asStatus(value: unknown): TaskStatus {
+  const s = asString(value);
+  if (STATUS_VALUES.has(s)) return s as TaskStatus;
+  return TaskStatusValues.NotStarted;
+}
+
+/**
+ * In-memory shape used by the repository. Carries the absolute (1-based) sheet
+ * row number alongside the Task so updates can target the right row without
+ * an additional lookup.
+ */
+export interface TaskWithRow {
+  task: Task;
+  rowNumber: number;
+}
+
+export function parseTaskDbRows(values: unknown[][]): TaskWithRow[] {
+  if (values.length === 0) return [];
+  const [headerRow, ...rows] = values;
+  if (!headerRow) return [];
+  const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
+
+  const tasks: TaskWithRow[] = [];
+  rows.forEach((row, i) => {
+    const taskId = asString(row[idx.TaskID]);
+    if (!taskId) return;
+    const start = parseSheetDateCell(row[idx.ScheduledStartTime]);
+    const end = parseSheetDateCell(row[idx.ScheduledEndTime]);
+    if (!start || !end) return;
+    tasks.push({
+      rowNumber: i + 2, // +1 for header, +1 for 1-based
+      task: {
+        taskId,
+        taskName: asString(row[idx.TaskName]),
+        category: (() => {
+          const c = asString(row[idx.Category]);
+          return c.length === 0 ? null : c;
+        })(),
+        estimateMinutes: asNumber(row[idx.EstimateMinutes]),
+        scheduledStartTime: start,
+        scheduledEndTime: end,
+        actualStartTime: parseSheetDateCell(row[idx.ActualStartTime]),
+        actualEndTime: parseSheetDateCell(row[idx.ActualEndTime]),
+        status: asStatus(row[idx.Status]),
+        calendarEventId: asString(row[idx.CalendarEventID]),
+      },
+    });
+  });
+  return tasks;
+}
+
+/**
+ * Build a sheet row aligned with the provided header row so each column lands
+ * in the correct position even if the user has reordered them.
+ */
+export function buildTaskRow(headerRow: unknown[], task: Task): unknown[] {
+  const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
+  const row = new Array<unknown>(headerRow.length).fill('');
+  row[idx.TaskID] = task.taskId;
+  row[idx.TaskName] = task.taskName;
+  row[idx.Category] = task.category ?? '';
+  row[idx.EstimateMinutes] = task.estimateMinutes;
+  row[idx.ScheduledStartTime] = formatDateForSheet(task.scheduledStartTime);
+  row[idx.ScheduledEndTime] = formatDateForSheet(task.scheduledEndTime);
+  row[idx.ActualStartTime] = task.actualStartTime ? formatDateForSheet(task.actualStartTime) : '';
+  row[idx.ActualEndTime] = task.actualEndTime ? formatDateForSheet(task.actualEndTime) : '';
+  row[idx.Status] = task.status;
+  row[idx.CalendarEventID] = task.calendarEventId;
+  return row;
+}
+
+/**
+ * Calendar event title format (matches legacy GAS):
+ *   - with category:    `(${category})_${name}`
+ *   - without category: `${name}`
+ */
+export function formatEventTitle(taskName: string, category: string | null): string {
+  return category ? `(${category})_${taskName}` : taskName;
+}
+
+const TITLED_RE = /^\((.*?)\)_(.*)/s;
+
+export function parseEventTitle(title: string): { taskName: string; category: string | null } {
+  const m = TITLED_RE.exec(title);
+  if (m && m[1] !== undefined && m[2] !== undefined) {
+    return { category: m[1], taskName: m[2] };
+  }
+  return { category: null, taskName: title };
+}
