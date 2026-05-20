@@ -1,6 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { CalendarPlus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useTasks } from '@/features/tasks/hooks/useTasks';
 import { useStartTask, useEndTask } from '@/features/tasks/hooks/useTaskMutations';
+import { useGenerateRoutines } from '@/features/routines/hooks/useGenerateRoutines';
 import { CurrentTaskCard } from '@/features/tasks/components/CurrentTaskCard';
 import { NextTaskCard } from '@/features/tasks/components/NextTaskCard';
 import { TaskList } from '@/features/tasks/components/TaskList';
@@ -16,10 +19,7 @@ function partition(tasks: Task[]): {
   const todays = tasks.filter(
     (t) => formatJst(t.scheduledStartTime, 'yyyy-MM-dd') === todayKey,
   );
-  // Current = first In Progress (regardless of date, but typically today)
-  const current =
-    tasks.find((t) => t.status === TaskStatus.InProgress) ?? null;
-  // Next = first Not Started in chronological order (today preferred)
+  const current = tasks.find((t) => t.status === TaskStatus.InProgress) ?? null;
   const next =
     todays.find((t) => t.status === TaskStatus.NotStarted) ??
     tasks.find((t) => t.status === TaskStatus.NotStarted) ??
@@ -31,11 +31,33 @@ export function TodayRoute() {
   const tasksQuery = useTasks();
   const startMutation = useStartTask();
   const endMutation = useEndTask();
+  const routinesMutation = useGenerateRoutines();
+  const [routineFeedback, setRoutineFeedback] = useState<string | null>(null);
 
   const { todays, current, next } = useMemo(
     () => partition(tasksQuery.data ?? []),
     [tasksQuery.data],
   );
+
+  const handleGenerateRoutines = async () => {
+    setRoutineFeedback(null);
+    try {
+      const result = await routinesMutation.mutateAsync();
+      if (result.addedCount === 0 && result.skippedCount === 0) {
+        setRoutineFeedback('対象のルーチンタスクが見つかりませんでした');
+      } else if (result.addedCount === 0) {
+        setRoutineFeedback(
+          `翌週分はすでに生成済みです（${result.skippedCount}件スキップ）`,
+        );
+      } else {
+        setRoutineFeedback(
+          `${result.weekStartIso}〜${result.weekEndIso} に ${result.addedCount}件追加（${result.skippedCount}件スキップ）`,
+        );
+      }
+    } catch (err) {
+      setRoutineFeedback(`生成に失敗しました：${err instanceof Error ? err.message : err}`);
+    }
+  };
 
   return (
     <div className="space-y-3 p-4">
@@ -67,6 +89,21 @@ export function TodayRoute() {
               本日のタスク一覧
             </h2>
             <TaskList tasks={todays} nextTaskId={next?.taskId ?? null} />
+          </div>
+
+          <div className="pt-2">
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={handleGenerateRoutines}
+              disabled={routinesMutation.isPending}
+            >
+              <CalendarPlus className="h-4 w-4" />
+              {routinesMutation.isPending ? '生成中…' : '翌週のルーチンタスクを生成'}
+            </Button>
+            {routineFeedback ? (
+              <p className="mt-2 text-xs text-muted-foreground">{routineFeedback}</p>
+            ) : null}
           </div>
         </>
       )}

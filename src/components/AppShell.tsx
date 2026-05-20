@@ -1,7 +1,9 @@
-import { Calendar, Plus, Users, Settings } from 'lucide-react';
+import { Calendar, Plus, Users, Settings, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useUIStore, type Tab } from '@/store/uiStore';
 import { formatJst } from '@/lib/time/jst';
+import { useSync } from '@/features/sync/useSync';
 
 const TABS: ReadonlyArray<{ id: Tab; label: string; Icon: typeof Calendar }> = [
   { id: 'today', label: '今日', Icon: Calendar },
@@ -16,29 +18,59 @@ interface AppShellProps {
 
 const WEEKDAY = ['日', '月', '火', '水', '木', '金', '土'] as const;
 
-/**
- * Layout shell shared between mobile and desktop.
- * - mobile (<480px): full-width column, fixed bottom tabs that respect iOS safe area
- * - desktop: centred 480px column with subtle bg, tabs stay anchored at the column bottom
- */
 export function AppShell({ children }: AppShellProps) {
   const currentTab = useUIStore((s) => s.currentTab);
   const setTab = useUIStore((s) => s.setTab);
+  const sync = useSync();
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const today = new Date();
   const dateLabel = `${formatJst(today, 'yyyy年M月d日')}（${WEEKDAY[today.getDay()]}）`;
+
+  const runSync = async () => {
+    setSyncMessage(null);
+    try {
+      const result = await sync.mutateAsync();
+      setSyncMessage(
+        `同期完了: タスク ${result.tasksUpdated} 件 / 確認待ち ${result.waitingUpdated} 件更新` +
+          (result.waitingCleared > 0 ? ` / ${result.waitingCleared} 件削除` : ''),
+      );
+      setTimeout(() => setSyncMessage(null), 3000);
+    } catch (err) {
+      setSyncMessage(`同期失敗: ${err instanceof Error ? err.message : err}`);
+    }
+  };
 
   return (
     <div className="min-h-dvh w-full bg-muted/30">
       <div className="mx-auto flex min-h-dvh max-w-[480px] flex-col bg-background shadow-sm sm:my-0 md:my-4 md:min-h-[calc(100dvh-2rem)] md:rounded-2xl md:shadow-lg">
         <header
-          className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/95 px-4 py-3 backdrop-blur md:rounded-t-2xl"
+          className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-background/95 px-4 py-3 backdrop-blur md:rounded-t-2xl"
           style={{ paddingTop: 'max(env(safe-area-inset-top), 0.75rem)' }}
         >
-          <div>
+          <div className="min-w-0">
             <h1 className="text-lg font-bold tracking-tight">⚡ Taskchute</h1>
             <p className="text-xs text-muted-foreground">{dateLabel}</p>
           </div>
+          <button
+            type="button"
+            onClick={runSync}
+            disabled={sync.isPending}
+            className={cn(
+              'flex h-9 items-center gap-1 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted',
+              sync.isPending && 'opacity-60',
+            )}
+            aria-label="同期"
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', sync.isPending && 'animate-spin')} />
+            同期
+          </button>
         </header>
+
+        {syncMessage ? (
+          <div className="border-b border-border bg-muted/60 px-4 py-1.5 text-[11px] text-muted-foreground">
+            {syncMessage}
+          </div>
+        ) : null}
 
         <main
           className="flex-1 overflow-y-auto"
