@@ -1,3 +1,6 @@
+import { addDays } from 'date-fns';
+import holidayJp from '@holiday-jp/holiday_jp';
+import { jstDate, formatJst } from '@/lib/time/jst';
 import type { RoutineTask, Schedule } from '@/features/routines/types';
 
 const WEEKDAY_JP: Record<string, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
@@ -21,7 +24,7 @@ export class InvalidScheduleError extends Error {
 
 export function parseSchedule(raw: string): Schedule {
   const t = raw.trim();
-  if (t === '毎日') return { kind: 'daily' };
+  if (t === '毎営業日') return { kind: 'businessDay' };
   if (t in WEEKDAY_JP) return { kind: 'weekday', day: WEEKDAY_JP[t]! };
   if (t === '初日') return { kind: 'monthFirst' };
   if (t === '末日') return { kind: 'monthLast' };
@@ -44,18 +47,64 @@ function lastDayOfMonth(year: number, monthOneBased: number): number {
   return new Date(Date.UTC(year, monthOneBased, 0)).getUTCDate();
 }
 
+/**
+ * Look up the holiday table by plain "YYYY-MM-DD" string key rather than passing
+ * a Date through holiday_jp's isHoliday (which reads local getFullYear/getMonth/
+ * getDate) — avoids any dependency on the runtime's local timezone matching JST.
+ */
+function isJstHoliday(date: JstDateParts): boolean {
+  const key = `${date.year}-${String(date.monthOneBased).padStart(2, '0')}-${String(
+    date.day,
+  ).padStart(2, '0')}`;
+  return Object.prototype.hasOwnProperty.call(holidayJp.holidays, key);
+}
+
+/** Sat/Sun or a JST national holiday, checked against a real Date. */
+function isWeekendOrHolidayDate(d: Date): boolean {
+  const isoWeekday = formatJst(d, 'i'); // '1'..'7' Mon..Sun
+  if (isoWeekday === '6' || isoWeekday === '7') return true;
+  return Object.prototype.hasOwnProperty.call(holidayJp.holidays, formatJst(d, 'yyyy-MM-dd'));
+}
+
+/**
+ * Walk backwards day by day until landing on a business day. Used for
+ * month-anchored schedules (初日/末日/◯日): if the nominal day falls on a
+ * weekend or holiday, the occurrence moves to the nearest preceding business
+ * day (can cross a month boundary, e.g. May 1st being a holiday Monday
+ * rolls back into the previous month).
+ */
+function previousBusinessDay(date: Date): Date {
+  let d = date;
+  while (isWeekendOrHolidayDate(d)) {
+    d = addDays(d, -1);
+  }
+  return d;
+}
+
+/** True if `date` is the holiday-adjusted occurrence of `nominalDay` in its month. */
+function matchesMonthAnchoredDay(date: JstDateParts, nominalDay: number): boolean {
+  const nominal = jstDate(date.year, date.monthOneBased, nominalDay);
+  const actual = previousBusinessDay(nominal);
+  const candidate = jstDate(date.year, date.monthOneBased, date.day);
+  return actual.getTime() === candidate.getTime();
+}
+
 export function matchesSchedule(schedule: Schedule, date: JstDateParts): boolean {
   switch (schedule.kind) {
-    case 'daily':
-      return true;
+    case 'businessDay':
+      // 土日祝を除く平日のみ。
+      return date.weekday !== 0 && date.weekday !== 6 && !isJstHoliday(date);
     case 'weekday':
       return date.weekday === schedule.day;
     case 'monthFirst':
-      return date.day === 1;
+      return matchesMonthAnchoredDay(date, 1);
     case 'monthLast':
-      return date.day === lastDayOfMonth(date.year, date.monthOneBased);
-    case 'dayOfMonth':
-      return date.day === schedule.day;
+      return matchesMonthAnchoredDay(date, lastDayOfMonth(date.year, date.monthOneBased));
+    case 'dayOfMonth': {
+      const lastDay = lastDayOfMonth(date.year, date.monthOneBased);
+      if (schedule.day > lastDay) return false; // e.g. "31日" doesn't exist in February
+      return matchesMonthAnchoredDay(date, schedule.day);
+    }
   }
 }
 
@@ -64,7 +113,7 @@ export interface ParsedRoutineRow {
   raw: { schedule: string };
 }
 
-function parseTime(raw: unknown): { hour: number; minute: number } | null {
+export function parseTime(raw: unknown): { hour: number; minute: number } | null {
   if (raw === null || raw === undefined || raw === '') return null;
   // Sheets often stores time-only cells as a fraction of a day (e.g. 09:00 = 0.375).
   if (typeof raw === 'number') {

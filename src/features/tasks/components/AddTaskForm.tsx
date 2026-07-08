@@ -5,18 +5,21 @@ import { Label } from '@/components/ui/label';
 import { TaskInputSchema } from '@/features/tasks/validators';
 import { useAddTask } from '@/features/tasks/hooks/useTaskMutations';
 import { useCategories } from '@/features/tasks/hooks/useCategories';
+import {
+  ceilToNext15Minutes,
+  parseDatetimeLocalValue,
+  toDatetimeLocalValue,
+} from '@/lib/time/datetimeLocalInput';
 
-function parseLocalDateTime(value: string): Date | undefined {
-  if (!value) return undefined;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? undefined : d;
+function defaultStartTime(): string {
+  return toDatetimeLocalValue(ceilToNext15Minutes(new Date()));
 }
 
 export function AddTaskForm() {
   const [name, setName] = useState('');
-  const [minutes, setMinutes] = useState('');
+  const [minutes, setMinutes] = useState('30');
   const [category, setCategory] = useState('');
-  const [startTime, setStartTime] = useState('');
+  const [startTime, setStartTime] = useState(defaultStartTime);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -32,7 +35,7 @@ export function AddTaskForm() {
       taskName: name,
       estimateMinutes: Number(minutes),
       category: category || undefined,
-      startTime: parseLocalDateTime(startTime),
+      startTime: parseDatetimeLocalValue(startTime),
     });
     if (!result.success) {
       const errors: Record<string, string> = {};
@@ -47,8 +50,8 @@ export function AddTaskForm() {
     try {
       await mutation.mutateAsync(result.data);
       setName('');
-      setMinutes('');
-      setStartTime('');
+      setMinutes('30');
+      setStartTime(defaultStartTime());
     } catch (err) {
       setServerError(err instanceof Error ? err.message : String(err));
     }
@@ -95,7 +98,7 @@ export function AddTaskForm() {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="category">カテゴリ</Label>
+          <Label htmlFor="category">案件</Label>
           <select
             id="category"
             value={category}
@@ -104,8 +107,8 @@ export function AddTaskForm() {
           >
             <option value="">（未選択）</option>
             {(categoriesQuery.data ?? []).map((c) => (
-              <option key={c} value={c}>
-                {c}
+              <option key={c.name} value={c.name}>
+                {c.name}
               </option>
             ))}
           </select>
@@ -117,6 +120,7 @@ export function AddTaskForm() {
         <Input
           id="start"
           type="datetime-local"
+          step={900}
           value={startTime}
           onChange={(e) => setStartTime(e.target.value)}
         />

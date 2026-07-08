@@ -19,9 +19,7 @@ function followUpChip(date: Date | null): { text: string; overdue: boolean } | n
   const overdue = date.getTime() < today.getTime();
   return {
     overdue,
-    text: overdue
-      ? `期限切れ ${formatJst(date, 'M/d')}`
-      : `${formatJst(date, 'M/d')} 確認`,
+    text: overdue ? `期限切れ ${formatJst(date, 'M/d')}` : `${formatJst(date, 'M/d')} 確認`,
   };
 }
 
@@ -45,9 +43,15 @@ export function WaitingTaskRow({
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            {task.completed ? <Badge variant="done">完了</Badge> : <Badge variant="wait">WAITING</Badge>}
+            {task.completed ? (
+              <Badge variant="done">完了</Badge>
+            ) : (
+              <Badge variant="wait">WAITING</Badge>
+            )}
           </div>
-          <div className={cn('mt-1 truncate text-sm font-medium', task.completed && 'line-through')}>
+          <div
+            className={cn('mt-1 truncate text-sm font-medium', task.completed && 'line-through')}
+          >
             {task.taskName}
           </div>
           <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">

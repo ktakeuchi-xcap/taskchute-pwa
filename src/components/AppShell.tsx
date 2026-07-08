@@ -1,12 +1,13 @@
-import { Calendar, Plus, Users, Settings, RefreshCw } from 'lucide-react';
+import { Calendar, CalendarDays, Plus, Users, Settings, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useUIStore, type Tab } from '@/store/uiStore';
-import { formatJst } from '@/lib/time/jst';
-import { useSync } from '@/features/sync/useSync';
+import { formatJst, WEEKDAY_JA } from '@/lib/time/jst';
+import { useAutoSync } from '@/features/sync/useAutoSync';
 
 const TABS: ReadonlyArray<{ id: Tab; label: string; Icon: typeof Calendar }> = [
   { id: 'today', label: '今日', Icon: Calendar },
+  { id: 'upcoming', label: '予定', Icon: CalendarDays },
   { id: 'add', label: '追加', Icon: Plus },
   { id: 'waiting', label: '確認待ち', Icon: Users },
   { id: 'settings', label: '設定', Icon: Settings },
@@ -16,15 +17,13 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
-const WEEKDAY = ['日', '月', '火', '水', '木', '金', '土'] as const;
-
 export function AppShell({ children }: AppShellProps) {
   const currentTab = useUIStore((s) => s.currentTab);
   const setTab = useUIStore((s) => s.setTab);
-  const sync = useSync();
+  const sync = useAutoSync();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const today = new Date();
-  const dateLabel = `${formatJst(today, 'yyyy年M月d日')}（${WEEKDAY[today.getDay()]}）`;
+  const dateLabel = `${formatJst(today, 'yyyy年M月d日')}（${WEEKDAY_JA[today.getDay()]}）`;
 
   const runSync = async () => {
     setSyncMessage(null);

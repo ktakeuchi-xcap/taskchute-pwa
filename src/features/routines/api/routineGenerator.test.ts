@@ -79,10 +79,10 @@ function createCalendar(): CalendarClient & { inserted: CalendarEvent[] } {
 }
 
 describe('generateNextWeekRoutines', () => {
-  it('generates 5 daily tasks (Mon–Fri) when no routines exist yet', async () => {
+  it('generates 5 business-day tasks (Mon–Fri) when no routines exist yet', async () => {
     const sheets = createSheets({
       TaskDB: [TASKDB_HEADER],
-      RoutineTasks: [ROUTINE_HEADER, ['毎日', '朝会', '09:00', '管理', 15]],
+      RoutineTasks: [ROUTINE_HEADER, ['毎営業日', '朝会', '09:00', '管理', 15]],
     });
     const calendar = createCalendar();
     // 2026-05-19 is a Tuesday in JST → next Monday is 2026-05-25
@@ -115,7 +115,7 @@ describe('generateNextWeekRoutines', () => {
         TASKDB_HEADER,
         ['t1', '朝会', '管理', 15, toSerial(start), toSerial(end), '', '', 'Not Started', 'e1'],
       ],
-      RoutineTasks: [ROUTINE_HEADER, ['毎日', '朝会', '09:00', '管理', 15]],
+      RoutineTasks: [ROUTINE_HEADER, ['毎営業日', '朝会', '09:00', '管理', 15]],
     });
     const calendar = createCalendar();
     const result = await generateNextWeekRoutines({

@@ -24,3 +24,8 @@ export interface TaskInput {
   category?: string;
   startTime?: Date;
 }
+
+export interface CategoryInfo {
+  name: string;
+  color: string | null;
+}

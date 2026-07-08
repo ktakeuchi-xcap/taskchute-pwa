@@ -27,35 +27,49 @@ interface SheetState {
 function createMockSheets(state: SheetState): SheetsClient & {
   appendCalls: unknown[][][];
   batchUpdates: ValueRange[][];
+  deletedRows: Array<{ sheetId: number; rowIndex: number }>;
+  updateCalls: Array<{ range: string; values: unknown[][] }>;
 } {
   const appendCalls: unknown[][][] = [];
   const batchUpdates: ValueRange[][] = [];
+  const deletedRows: Array<{ sheetId: number; rowIndex: number }> = [];
+  const updateCalls: Array<{ range: string; values: unknown[][] }> = [];
   return {
     appendCalls,
     batchUpdates,
+    deletedRows,
+    updateCalls,
     async getValues(_id, range) {
       if (range.startsWith('TaskDB')) return state.TaskDB;
+      if (range === 'Settings!A:A') return state.Settings;
       if (range.startsWith('Settings')) {
         // honour "Settings!A2:A" by slicing the header row.
         return state.Settings.slice(1);
       }
       return [];
     },
-    async appendRows(_id, _range, rows) {
+    async appendRows(_id, range, rows) {
       appendCalls.push(rows);
-      state.TaskDB.push(...rows);
+      if (range.startsWith('Settings')) {
+        state.Settings.push(...rows);
+      } else {
+        state.TaskDB.push(...rows);
+      }
     },
-    async updateRange() {
-      // not used in these tests
+    async updateRange(_id, range, values) {
+      updateCalls.push({ range, values });
     },
     async batchUpdateValues(_id, data) {
       batchUpdates.push(data);
     },
-    async deleteRow() {
-      // not used
+    async deleteRow(_id, sheetId, rowIndex) {
+      deletedRows.push({ sheetId, rowIndex });
     },
     async getSheetMetadata() {
-      return [{ sheetId: 0, title: 'TaskDB' }];
+      return [
+        { sheetId: 42, title: 'TaskDB' },
+        { sheetId: 7, title: 'Settings' },
+      ];
     },
   };
 }
@@ -63,12 +77,15 @@ function createMockSheets(state: SheetState): SheetsClient & {
 function createMockCalendar(): CalendarClient & {
   inserted: CalendarEvent[];
   patches: Array<{ id: string; patch: unknown }>;
+  deleted: string[];
 } {
   const inserted: CalendarEvent[] = [];
   const patches: Array<{ id: string; patch: unknown }> = [];
+  const deleted: string[] = [];
   return {
     inserted,
     patches,
+    deleted,
     async list() {
       return [];
     },
@@ -93,8 +110,8 @@ function createMockCalendar(): CalendarClient & {
         colorId: null,
       };
     },
-    async delete() {
-      // not used
+    async delete(_calId, eventId) {
+      deleted.push(eventId);
     },
   };
 }
@@ -105,11 +122,7 @@ describe('TaskRepository', () => {
     const end1 = new Date('2026-05-19T09:30:00+09:00');
     const start2 = new Date('2026-05-19T10:00:00+09:00');
     const end2 = new Date('2026-05-19T10:30:00+09:00');
-    const buildRow = (
-      id: string,
-      start: Date,
-      end: Date,
-    ): unknown[] => [
+    const buildRow = (id: string, start: Date, end: Date): unknown[] => [
       id,
       `task-${id}`,
       '',
@@ -199,6 +212,79 @@ describe('TaskRepository', () => {
     );
   });
 
+  it('updateTask rewrites name/category/estimate/start-end and patches the calendar event', async () => {
+    const start = new Date('2026-05-19T10:00:00+09:00');
+    const end = new Date('2026-05-19T10:30:00+09:00');
+    const sheets = createMockSheets({
+      TaskDB: [
+        HEADER,
+        [
+          'tid-a',
+          'A',
+          '管理',
+          30,
+          dateToSheetSerial(start),
+          dateToSheetSerial(end),
+          '',
+          '',
+          'Not Started',
+          'evt-a',
+        ],
+      ],
+      Settings: [],
+    });
+    const calendar = createMockCalendar();
+    const repo = createTaskRepository({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+    });
+
+    const newStart = new Date('2026-05-19T11:00:00+09:00');
+    const updated = await repo.updateTask('tid-a', {
+      taskName: 'A改',
+      estimateMinutes: 45,
+      category: '営業',
+      startTime: newStart,
+    });
+
+    expect(updated.taskName).toBe('A改');
+    expect(updated.category).toBe('営業');
+    expect(updated.estimateMinutes).toBe(45);
+    expect(updated.scheduledStartTime.toISOString()).toBe(newStart.toISOString());
+    expect(updated.scheduledEndTime.toISOString()).toBe(
+      new Date(newStart.getTime() + 45 * 60_000).toISOString(),
+    );
+
+    expect(sheets.batchUpdates).toHaveLength(1);
+    expect(sheets.batchUpdates[0]).toHaveLength(5);
+    expect(calendar.patches).toEqual([
+      {
+        id: 'evt-a',
+        patch: {
+          summary: '(営業)_A改',
+          start: newStart,
+          end: new Date(newStart.getTime() + 45 * 60_000),
+        },
+      },
+    ]);
+  });
+
+  it('throws when updating a non-existent task', async () => {
+    const sheets = createMockSheets({ TaskDB: [HEADER], Settings: [] });
+    const calendar = createMockCalendar();
+    const repo = createTaskRepository({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+    });
+    await expect(
+      repo.updateTask('missing', { taskName: 'x', estimateMinutes: 10 }),
+    ).rejects.toThrowError(/not found/);
+  });
+
   it('startTask flips Status and patches calendar to yellow', async () => {
     const start = new Date('2026-05-19T10:00:00+09:00');
     const end = new Date('2026-05-19T10:30:00+09:00');
@@ -283,10 +369,16 @@ describe('TaskRepository', () => {
     });
   });
 
-  it('listCategories returns flattened non-empty strings from Settings A2:A', async () => {
+  it('listCategories returns name/color pairs from Settings A2:B', async () => {
     const sheets = createMockSheets({
       TaskDB: [HEADER],
-      Settings: [['header'], ['管理'], ['営業'], [''], ['開発']],
+      Settings: [
+        ['header', 'color'],
+        ['管理', 'blue'],
+        ['営業', ''],
+        ['', ''],
+        ['開発', 'green'],
+      ],
     });
     const calendar = createMockCalendar();
     const repo = createTaskRepository({
@@ -296,7 +388,95 @@ describe('TaskRepository', () => {
       calendarId: 'cid',
     });
     const cats = await repo.listCategories();
-    expect(cats).toEqual(['管理', '営業', '開発']);
+    expect(cats).toEqual([
+      { name: '管理', color: 'blue' },
+      { name: '営業', color: null },
+      { name: '開発', color: 'green' },
+    ]);
+  });
+
+  it('addCategory appends a name/color row to the Settings sheet', async () => {
+    const sheets = createMockSheets({
+      TaskDB: [HEADER],
+      Settings: [['header'], ['管理', 'blue']],
+    });
+    const calendar = createMockCalendar();
+    const repo = createTaskRepository({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+    });
+    await repo.addCategory('営業', 'purple');
+    expect(sheets.appendCalls).toEqual([[['営業', 'purple']]]);
+  });
+
+  it('updateCategory rewrites the matching name/color cells in place', async () => {
+    const sheets = createMockSheets({
+      TaskDB: [HEADER],
+      Settings: [['header'], ['管理', 'blue'], ['営業', 'red'], ['開発', 'green']],
+    });
+    const calendar = createMockCalendar();
+    const repo = createTaskRepository({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+    });
+    await repo.updateCategory('営業', '営業企画', 'amber');
+    // '営業' is at array index 2 -> spreadsheet row 3 (1-based).
+    expect(sheets.updateCalls).toEqual([
+      { range: 'Settings!A3:B3', values: [['営業企画', 'amber']] },
+    ]);
+  });
+
+  it('throws when updating a non-existent category', async () => {
+    const sheets = createMockSheets({
+      TaskDB: [HEADER],
+      Settings: [['header'], ['管理', 'blue']],
+    });
+    const calendar = createMockCalendar();
+    const repo = createTaskRepository({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+    });
+    await expect(repo.updateCategory('存在しない', '新名', 'blue')).rejects.toThrowError(
+      /not found/,
+    );
+  });
+
+  it('deleteCategory removes the matching row from the Settings sheet', async () => {
+    const sheets = createMockSheets({
+      TaskDB: [HEADER],
+      Settings: [['header'], ['管理'], ['営業'], ['開発']],
+    });
+    const calendar = createMockCalendar();
+    const repo = createTaskRepository({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+    });
+    await repo.deleteCategory('営業');
+    // '営業' is at array index 2 (header=0, 管理=1, 営業=2) -> 0-based grid row index 2.
+    expect(sheets.deletedRows).toEqual([{ sheetId: 7, rowIndex: 2 }]);
+  });
+
+  it('throws when deleting a non-existent category', async () => {
+    const sheets = createMockSheets({
+      TaskDB: [HEADER],
+      Settings: [['header'], ['管理']],
+    });
+    const calendar = createMockCalendar();
+    const repo = createTaskRepository({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+    });
+    await expect(repo.deleteCategory('存在しない')).rejects.toThrowError(/not found/);
   });
 
   it('throws when starting a non-existent task', async () => {
@@ -309,5 +489,65 @@ describe('TaskRepository', () => {
       calendarId: 'cid',
     });
     await expect(repo.startTask('missing')).rejects.toThrowError(/not found/);
+  });
+
+  it('deleteTask removes the sheet row and the calendar event', async () => {
+    const start = new Date('2026-05-19T10:00:00+09:00');
+    const end = new Date('2026-05-19T10:30:00+09:00');
+    const sheets = createMockSheets({
+      TaskDB: [
+        HEADER,
+        [
+          'tid-other',
+          'other',
+          '',
+          30,
+          dateToSheetSerial(start),
+          dateToSheetSerial(end),
+          '',
+          '',
+          'Not Started',
+          'evt-other',
+        ],
+        [
+          'tid-c',
+          'C',
+          '',
+          30,
+          dateToSheetSerial(start),
+          dateToSheetSerial(end),
+          '',
+          '',
+          'Not Started',
+          'evt-c',
+        ],
+      ],
+      Settings: [],
+    });
+    const calendar = createMockCalendar();
+    const repo = createTaskRepository({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+    });
+
+    await repo.deleteTask('tid-c');
+
+    // tid-c is in row 3 (1-based, header is row 1) -> 0-based grid index 2.
+    expect(sheets.deletedRows).toEqual([{ sheetId: 42, rowIndex: 2 }]);
+    expect(calendar.deleted).toEqual(['evt-c']);
+  });
+
+  it('throws when deleting a non-existent task', async () => {
+    const sheets = createMockSheets({ TaskDB: [HEADER], Settings: [] });
+    const calendar = createMockCalendar();
+    const repo = createTaskRepository({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+    });
+    await expect(repo.deleteTask('missing')).rejects.toThrowError(/not found/);
   });
 });

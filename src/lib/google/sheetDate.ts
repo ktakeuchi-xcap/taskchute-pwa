@@ -17,9 +17,7 @@ const JST_OFFSET_MS = 9 * 3_600_000;
 export function sheetSerialToDate(serial: number): Date {
   // serial is fractional days in JST → ms in JST → subtract JST offset for UTC.
   // Round to whole milliseconds; floating-point math otherwise drifts by sub-ms.
-  return new Date(
-    Math.round((serial - SHEETS_EPOCH_OFFSET_DAYS) * MS_PER_DAY - JST_OFFSET_MS),
-  );
+  return new Date(Math.round((serial - SHEETS_EPOCH_OFFSET_DAYS) * MS_PER_DAY - JST_OFFSET_MS));
 }
 
 export function dateToSheetSerial(date: Date): number {

@@ -57,9 +57,7 @@ export function loadGoogleIdentityServices(): Promise<GisOAuth2> {
   if (pendingLoad) return pendingLoad;
 
   pendingLoad = new Promise<GisOAuth2>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(
-      `script[src="${GIS_SCRIPT_URL}"]`,
-    );
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${GIS_SCRIPT_URL}"]`);
     const script = existing ?? document.createElement('script');
     if (!existing) {
       script.src = GIS_SCRIPT_URL;

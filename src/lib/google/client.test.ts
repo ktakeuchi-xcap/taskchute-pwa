@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAuthClientForTesting } from './client';
-import type {
-  GisOAuth2,
-  TokenClient,
-  TokenClientError,
-  TokenResponse,
-} from './gisLoader';
+import type { GisOAuth2, TokenClient, TokenClientError, TokenResponse } from './gisLoader';
 import { AuthDeniedError, AuthRequiredError } from './errors';
 
 interface MockGis {

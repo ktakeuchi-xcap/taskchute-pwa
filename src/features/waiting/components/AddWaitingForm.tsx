@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { WaitingTaskInputSchema } from '@/features/waiting/validators';
 import { useAddWaitingTask } from '@/features/waiting/hooks/useWaitingMutations';
+import { formatJst } from '@/lib/time/jst';
 
 function parseDate(value: string): Date | undefined {
   if (!value) return undefined;
@@ -12,10 +13,14 @@ function parseDate(value: string): Date | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
+function todayDateValue(): string {
+  return formatJst(new Date(), 'yyyy-MM-dd');
+}
+
 export function AddWaitingForm() {
   const [name, setName] = useState('');
   const [waitingFor, setWaitingFor] = useState('');
-  const [followUp, setFollowUp] = useState('');
+  const [followUp, setFollowUp] = useState(todayDateValue);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -43,7 +48,7 @@ export function AddWaitingForm() {
       await mutation.mutateAsync(result.data);
       setName('');
       setWaitingFor('');
-      setFollowUp('');
+      setFollowUp(todayDateValue());
     } catch (err) {
       setServerError(err instanceof Error ? err.message : String(err));
     }
@@ -76,7 +81,7 @@ export function AddWaitingForm() {
             type="text"
             value={waitingFor}
             onChange={(e) => setWaitingFor(e.target.value)}
-            placeholder="例：米森さん"
+            placeholder="例：〇〇さん"
           />
         </div>
         <div className="space-y-1.5">
@@ -93,7 +98,13 @@ export function AddWaitingForm() {
         <p className="text-xs text-destructive">{fieldErrors.followUpDate}</p>
       ) : null}
 
-      <Button type="submit" variant="outline" size="lg" className="w-full" disabled={mutation.isPending}>
+      <Button
+        type="submit"
+        variant="outline"
+        size="lg"
+        className="w-full"
+        disabled={mutation.isPending}
+      >
         {mutation.isPending ? '追加中…' : '＋ 確認待ちに追加'}
       </Button>
 

@@ -58,14 +58,7 @@ describe('syncWaitingFromTasks', () => {
     const delegated = new Date('2026-05-16T09:00:00+09:00');
     const sheets = mockSheets([
       HEADER,
-      [
-        'sid-1',
-        'A',
-        '米森',
-        dateToSheetSerial(delegated),
-        '',
-        'gt-1',
-      ],
+      ['sid-1', 'A', '米森', dateToSheetSerial(delegated), '', 'gt-1'],
     ]);
     const tasks = mockTasks([]); // empty Google Tasks list
     const result = await syncWaitingFromTasks({
@@ -85,14 +78,7 @@ describe('syncWaitingFromTasks', () => {
     const delegated = new Date('2026-05-16T09:00:00+09:00');
     const sheets = mockSheets([
       HEADER,
-      [
-        'sid-1',
-        '旧依頼',
-        '米森',
-        dateToSheetSerial(delegated),
-        '',
-        'gt-1',
-      ],
+      ['sid-1', '旧依頼', '米森', dateToSheetSerial(delegated), '', 'gt-1'],
     ]);
     const tasks = mockTasks([
       {

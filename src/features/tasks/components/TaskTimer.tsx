@@ -36,7 +36,9 @@ export function TaskTimer({ startedAt, estimateMinutes }: TaskTimerProps) {
   const minutes = Math.floor((elapsedSec % 3600) / 60);
   const seconds = elapsedSec % 60;
   const display =
-    hours > 0 ? `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}` : `${pad2(minutes)}:${pad2(seconds)}`;
+    hours > 0
+      ? `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`
+      : `${pad2(minutes)}:${pad2(seconds)}`;
 
   return (
     <div className="space-y-2">

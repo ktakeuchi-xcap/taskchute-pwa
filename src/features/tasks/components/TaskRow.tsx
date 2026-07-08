@@ -1,11 +1,18 @@
+import { Pencil, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formatJst } from '@/lib/time/jst';
 import { TaskStatus, type Task } from '@/features/tasks/types';
+import { useCategoryColorMap } from '@/features/tasks/hooks/useCategoryColorMap';
+import { CategoryTag } from './CategoryTag';
 
 interface TaskRowProps {
   task: Task;
   isNext?: boolean;
+  onDelete?: (taskId: string) => void;
+  isDeleting?: boolean;
+  onEdit?: () => void;
 }
 
 const STATUS_DOT: Record<TaskStatus, string> = {
@@ -14,9 +21,26 @@ const STATUS_DOT: Record<TaskStatus, string> = {
   [TaskStatus.Done]: 'bg-emerald-500',
 };
 
-export function TaskRow({ task, isNext = false }: TaskRowProps) {
+export function TaskRow({
+  task,
+  isNext = false,
+  onDelete,
+  isDeleting = false,
+  onEdit,
+}: TaskRowProps) {
   const isDone = task.status === TaskStatus.Done;
   const isInProgress = task.status === TaskStatus.InProgress;
+  const categoryColorMap = useCategoryColorMap();
+
+  const handleDelete = () => {
+    const message = isDone
+      ? `「${task.taskName}」を削除しますか？完了済みの実績データも削除されます。この操作は取り消せません。`
+      : `「${task.taskName}」を削除しますか？この操作は取り消せません。`;
+    if (window.confirm(message)) {
+      onDelete?.(task.taskId);
+    }
+  };
+
   return (
     <div
       className={cn(
@@ -31,10 +55,16 @@ export function TaskRow({ task, isNext = false }: TaskRowProps) {
           {task.taskName}
         </div>
         <div className="text-[11px] text-muted-foreground">
-          {formatJst(task.scheduledStartTime, 'HH:mm')} – {formatJst(task.scheduledEndTime, 'HH:mm')}
+          {formatJst(task.scheduledStartTime, 'HH:mm')} –{' '}
+          {formatJst(task.scheduledEndTime, 'HH:mm')}
           {' ・ '}
           {task.estimateMinutes}分
-          {task.category ? <span className="ml-1">・ {task.category}</span> : null}
+          {task.category ? (
+            <>
+              {' ・ '}
+              <CategoryTag name={task.category} colorKey={categoryColorMap.get(task.category)} />
+            </>
+          ) : null}
         </div>
       </div>
       <div className="flex flex-shrink-0 flex-col items-end gap-1">
@@ -45,6 +75,29 @@ export function TaskRow({ task, isNext = false }: TaskRowProps) {
           <span className="text-[11px] text-muted-foreground">未着手</span>
         )}
       </div>
+      {onEdit ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-foreground"
+          aria-label="タスクを編集"
+          onClick={onEdit}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+      ) : null}
+      {onDelete ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-destructive"
+          aria-label="タスクを削除"
+          onClick={handleDelete}
+          disabled={isDeleting}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      ) : null}
     </div>
   );
 }

@@ -2,7 +2,10 @@ import { useMemo } from 'react';
 import { useAuth } from '@/features/auth/useAuth';
 import { createSheetsClient } from '@/lib/google/sheets';
 import { createTasksClient } from '@/lib/google/tasks';
-import { createWaitingRepository, type WaitingRepository } from '@/features/waiting/api/waitingRepository';
+import {
+  createWaitingRepository,
+  type WaitingRepository,
+} from '@/features/waiting/api/waitingRepository';
 import { env } from '@/lib/env';
 
 export function useWaitingRepository(): WaitingRepository | null {

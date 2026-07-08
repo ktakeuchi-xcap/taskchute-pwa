@@ -41,9 +41,7 @@ export function WaitingTaskList() {
         <WaitingTaskRow
           key={task.systemTaskId}
           task={task}
-          onToggleComplete={(completed) =>
-            toggle.mutate({ id: task.systemTaskId, completed })
-          }
+          onToggleComplete={(completed) => toggle.mutate({ id: task.systemTaskId, completed })}
           onRemove={() => remove.mutate(task.systemTaskId)}
           isPending={toggle.isPending || remove.isPending}
         />

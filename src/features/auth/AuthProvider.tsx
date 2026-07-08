@@ -25,14 +25,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   });
 
-  const [state, setState] = useState<AuthState>(() =>
-    client?.getState() ?? {
-      status: 'error',
-      accessToken: null,
-      expiresAt: null,
-      userEmail: null,
-      error: 'VITE_GOOGLE_OAUTH_CLIENT_ID is not configured. See docs/07_認証セットアップガイド.md',
-    },
+  const [state, setState] = useState<AuthState>(
+    () =>
+      client?.getState() ?? {
+        status: 'error',
+        accessToken: null,
+        expiresAt: null,
+        userEmail: null,
+        error:
+          'VITE_GOOGLE_OAUTH_CLIENT_ID is not configured. See docs/07_認証セットアップガイド.md',
+      },
   );
 
   useEffect(() => {

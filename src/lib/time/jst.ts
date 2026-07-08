@@ -3,6 +3,8 @@ import { format, isSameDay, startOfDay, endOfDay, addDays } from 'date-fns';
 
 export const JST_TZ = 'Asia/Tokyo';
 
+export const WEEKDAY_JA = ['日', '月', '火', '水', '木', '金', '土'] as const;
+
 /**
  * Construct a Date that represents the given JST wall-clock time.
  * Avoids the UTC-shift bug from the legacy GAS implementation.

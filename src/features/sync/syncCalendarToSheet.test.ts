@@ -96,7 +96,7 @@ describe('syncCalendarToSheet', () => {
     expect(ranges.some((r) => /TaskDB!C2$/.test(r))).toBe(true); // Category
   });
 
-  it('does not touch Status=Done rows', async () => {
+  it('reflects title and time edits on Status=Done rows into Actual*, not Scheduled*', async () => {
     const start = new Date('2026-05-25T10:00:00+09:00');
     const end = new Date('2026-05-25T10:30:00+09:00');
     const sheets = mockSheets([
@@ -108,8 +108,8 @@ describe('syncCalendarToSheet', () => {
         30,
         dateToSheetSerial(start),
         dateToSheetSerial(end),
-        '',
-        '',
+        '', // ActualStartTime not set
+        '', // ActualEndTime not set
         'Done',
         'evt-b',
       ],
@@ -122,6 +122,50 @@ describe('syncCalendarToSheet', () => {
         end: new Date('2026-05-25T11:30:00+09:00'),
         colorId: null,
       },
+    ]);
+    const result = await syncCalendarToSheet({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+      now: () => new Date('2026-05-25T08:00:00+09:00'),
+    });
+    expect(result.updatedCount).toBe(1);
+    const ranges = sheets.batchUpdates[0]!.map((u) => u.range);
+    expect(ranges).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/TaskDB!B2$/), // TaskName
+        expect.stringMatching(/TaskDB!C2$/), // Category
+        expect.stringMatching(/TaskDB!G2$/), // ActualStartTime
+        expect.stringMatching(/TaskDB!H2$/), // ActualEndTime
+      ]),
+    );
+    // Scheduled*/Estimate must stay untouched for a completed task.
+    expect(ranges.some((r) => /TaskDB!E2$/.test(r))).toBe(false); // ScheduledStartTime
+    expect(ranges.some((r) => /TaskDB!F2$/.test(r))).toBe(false); // ScheduledEndTime
+    expect(ranges.some((r) => /TaskDB!D2$/.test(r))).toBe(false); // EstimateMinutes
+  });
+
+  it('does nothing for a Status=Done row when the Calendar event already matches', async () => {
+    const actualStart = new Date('2026-05-25T10:05:00+09:00');
+    const actualEnd = new Date('2026-05-25T10:28:00+09:00');
+    const sheets = mockSheets([
+      HEADER,
+      [
+        'tid-d',
+        '完了タスク',
+        '',
+        30,
+        dateToSheetSerial(new Date('2026-05-25T10:00:00+09:00')),
+        dateToSheetSerial(new Date('2026-05-25T10:30:00+09:00')),
+        dateToSheetSerial(actualStart),
+        dateToSheetSerial(actualEnd),
+        'Done',
+        'evt-d',
+      ],
+    ]);
+    const calendar = mockCalendar([
+      { id: 'evt-d', summary: '完了タスク', start: actualStart, end: actualEnd, colorId: null },
     ]);
     const result = await syncCalendarToSheet({
       sheets,

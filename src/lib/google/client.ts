@@ -150,11 +150,7 @@ class GoogleAuthClient implements AuthClient {
   ensureToken(options: { forceRefresh?: boolean } = {}): Promise<string> {
     if (!options.forceRefresh) {
       const { accessToken, expiresAt } = this.state;
-      if (
-        accessToken &&
-        expiresAt &&
-        expiresAt > this.now() + TOKEN_EXPIRY_SAFETY_MS
-      ) {
+      if (accessToken && expiresAt && expiresAt > this.now() + TOKEN_EXPIRY_SAFETY_MS) {
         return Promise.resolve(accessToken);
       }
     }
@@ -261,7 +257,9 @@ class GoogleAuthClient implements AuthClient {
     if (response.error || !response.access_token) {
       const reason = response.error ?? 'token_acquisition_failed';
       const error =
-        reason === 'interaction_required' || reason === 'login_required' || reason === 'consent_required'
+        reason === 'interaction_required' ||
+        reason === 'login_required' ||
+        reason === 'consent_required'
           ? new AuthRequiredError(reason)
           : new AuthDeniedError(reason, response.error_description ?? reason);
       // Silent failure is expected — surface as unauthenticated rather than 'error'.

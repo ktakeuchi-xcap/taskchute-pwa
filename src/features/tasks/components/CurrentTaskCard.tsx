@@ -2,6 +2,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { TaskTimer } from './TaskTimer';
+import { CategoryTag } from './CategoryTag';
+import { useCategoryColorMap } from '@/features/tasks/hooks/useCategoryColorMap';
 import type { Task } from '@/features/tasks/types';
 
 interface CurrentTaskCardProps {
@@ -11,6 +13,7 @@ interface CurrentTaskCardProps {
 }
 
 export function CurrentTaskCard({ task, onEnd, isPending }: CurrentTaskCardProps) {
+  const categoryColorMap = useCategoryColorMap();
   if (!task) {
     return (
       <Card className="border-dashed bg-card/60 p-4 text-center">
@@ -30,19 +33,16 @@ export function CurrentTaskCard({ task, onEnd, isPending }: CurrentTaskCardProps
           <Badge variant="progress">▶ IN PROGRESS</Badge>
           <h3 className="mt-1.5 text-base font-semibold leading-tight">{task.taskName}</h3>
           <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-            {task.category ? <Badge variant="muted">{task.category}</Badge> : null}
+            {task.category ? (
+              <CategoryTag name={task.category} colorKey={categoryColorMap.get(task.category)} />
+            ) : null}
           </div>
         </div>
       </div>
       <div className="mt-3">
         <TaskTimer startedAt={startedAt} estimateMinutes={task.estimateMinutes} />
       </div>
-      <Button
-        variant="destructive"
-        className="mt-4 w-full"
-        onClick={onEnd}
-        disabled={isPending}
-      >
+      <Button variant="destructive" className="mt-4 w-full" onClick={onEnd} disabled={isPending}>
         ■ 現在を終了
       </Button>
     </Card>

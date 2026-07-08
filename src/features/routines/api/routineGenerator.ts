@@ -3,11 +3,7 @@ import type { CalendarClient } from '@/lib/google/calendar';
 import { CalendarColor } from '@/lib/google/calendar';
 import type { SheetsClient } from '@/lib/google/sheets';
 import { jstDate, formatJst } from '@/lib/time/jst';
-import {
-  buildTaskRow,
-  formatEventTitle,
-  parseTaskDbRows,
-} from '@/features/tasks/api/serializers';
+import { buildTaskRow, formatEventTitle, parseTaskDbRows } from '@/features/tasks/api/serializers';
 import { TASKDB_SHEET } from '@/features/tasks/api/headers';
 import { TaskStatus, type Task } from '@/features/tasks/types';
 import { ROUTINES_SHEET } from './headers';
@@ -93,8 +89,7 @@ export async function generateNextWeekRoutines(
   const existingTasks = parseTaskDbRows(taskdbValues);
   const existingKeys = new Set(
     existingTasks.map(
-      (t) =>
-        `${formatJst(t.task.scheduledStartTime, 'yyyy-MM-dd')}_${t.task.taskName}`,
+      (t) => `${formatJst(t.task.scheduledStartTime, 'yyyy-MM-dd')}_${t.task.taskName}`,
     ),
   );
 

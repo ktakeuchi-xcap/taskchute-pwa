@@ -19,9 +19,7 @@ export function AddRoute() {
       <section className="space-y-3">
         <div>
           <h2 className="text-base font-bold">🤝 確認待ちタスクを追加</h2>
-          <p className="text-xs text-muted-foreground">
-            Google ToDo にも自動で登録されます
-          </p>
+          <p className="text-xs text-muted-foreground">Google ToDo にも自動で登録されます</p>
         </div>
         <AddWaitingForm />
       </section>

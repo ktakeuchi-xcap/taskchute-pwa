@@ -1,10 +1,7 @@
 import type { SheetsClient, ValueRange } from '@/lib/google/sheets';
 import { type TasksClient, parseWaitingTitle } from '@/lib/google/tasks';
 import { buildHeaderIndex } from '@/features/tasks/api/headers';
-import {
-  WAITING_HEADERS,
-  WAITING_SHEET,
-} from '@/features/waiting/api/headers';
+import { WAITING_HEADERS, WAITING_SHEET } from '@/features/waiting/api/headers';
 import { parseWaitingRows } from '@/features/waiting/api/serializers';
 import { formatDateForSheet } from '@/lib/google/sheetDate';
 
@@ -36,9 +33,7 @@ function columnLetter(col1Based: number): string {
  * exists. Row deletion is done by emptying the cells in a single batchUpdate —
  * avoids the classic "delete during iteration" bug from the GAS version.
  */
-export async function syncWaitingFromTasks(
-  deps: SyncWaitingDeps,
-): Promise<SyncWaitingResult> {
+export async function syncWaitingFromTasks(deps: SyncWaitingDeps): Promise<SyncWaitingResult> {
   const { sheets, tasks, spreadsheetId } = deps;
 
   const [sheetValues, googleTasks] = await Promise.all([

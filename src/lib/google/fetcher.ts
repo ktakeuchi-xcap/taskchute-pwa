@@ -63,7 +63,10 @@ export async function gfetch(
     try {
       parsed = await response.clone().json();
     } catch {
-      parsed = await response.clone().text().catch(() => null);
+      parsed = await response
+        .clone()
+        .text()
+        .catch(() => null);
     }
     throw new GoogleApiError(response.status, response.statusText, url, parsed);
   }

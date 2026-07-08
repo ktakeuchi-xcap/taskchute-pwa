@@ -23,7 +23,7 @@ export function LoginScreen() {
   const configMissing = !client;
   const errorMessage = configMissing
     ? state.error
-    : localError ?? (state.status === 'error' ? state.error : null);
+    : (localError ?? (state.status === 'error' ? state.error : null));
 
   return (
     <div className="flex min-h-dvh w-full items-center justify-center bg-muted/40 px-6">
@@ -54,7 +54,9 @@ export function LoginScreen() {
               onClick={handleSignIn}
               disabled={pending || state.status === 'authenticating'}
             >
-              {pending || state.status === 'authenticating' ? 'サインイン中…' : 'Google でサインイン'}
+              {pending || state.status === 'authenticating'
+                ? 'サインイン中…'
+                : 'Google でサインイン'}
             </Button>
             {errorMessage ? (
               <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
