@@ -29,7 +29,12 @@ export function DraggableTaskRow({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform) }}
-      className={cn('touch-none', isDragging && 'z-10 opacity-40')}
+      // touch-action stays at "manipulation" (not "none"): with a delay-based
+      // activation constraint, a quick swipe should still scroll the page
+      // natively — only a held press promotes into a drag and calls
+      // preventDefault at that point. "none" would block native scrolling
+      // the instant a finger lands on the row, before the delay even runs.
+      className={cn('touch-manipulation', isDragging && 'z-10 opacity-40')}
       {...listeners}
       {...attributes}
     >
