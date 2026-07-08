@@ -1,5 +1,5 @@
 import { formatInTimeZone, fromZonedTime, toZonedTime } from 'date-fns-tz';
-import { format, isSameDay, startOfDay, endOfDay, addDays } from 'date-fns';
+import { isSameDay, startOfDay, endOfDay, addDays } from 'date-fns';
 
 export const JST_TZ = 'Asia/Tokyo';
 
@@ -31,4 +31,4 @@ export function jstToday(): Date {
   return toZonedTime(new Date(), JST_TZ);
 }
 
-export { format, isSameDay, startOfDay, endOfDay, addDays };
+export { isSameDay, startOfDay, endOfDay, addDays };

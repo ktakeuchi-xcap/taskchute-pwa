@@ -24,16 +24,24 @@ export function dateToSheetSerial(date: Date): number {
   return (date.getTime() + JST_OFFSET_MS) / MS_PER_DAY + SHEETS_EPOCH_OFFSET_DAYS;
 }
 
+const SHEETS_DISPLAY_FORMAT = /^\d{4}\/\d{1,2}\/\d{1,2}[ T]\d{1,2}:\d{2}(:\d{2})?$/;
+
 export function parseSheetDateCell(value: unknown): Date | null {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'number') return sheetSerialToDate(value);
   if (typeof value === 'string') {
-    // Try ISO first, then fall back to Sheets' typical "yyyy/M/d H:mm:ss" display format.
-    const iso = new Date(value);
-    if (!Number.isNaN(iso.getTime())) return iso;
-    const normalized = value.replace(/\//g, '-').replace(' ', 'T');
-    const fallback = new Date(`${normalized}+09:00`);
-    return Number.isNaN(fallback.getTime()) ? null : fallback;
+    const trimmed = value.trim();
+    // Sheets' typical display format ("yyyy/M/d H:mm:ss") carries no timezone
+    // marker, so it must be forced to JST explicitly here. Checking this first
+    // avoids `new Date(value)` silently "succeeding" by parsing it in the
+    // runtime's local timezone instead (only correct when local tz is JST).
+    if (SHEETS_DISPLAY_FORMAT.test(trimmed)) {
+      const normalized = trimmed.replace(/\//g, '-').replace(' ', 'T');
+      const fallback = new Date(`${normalized}+09:00`);
+      return Number.isNaN(fallback.getTime()) ? null : fallback;
+    }
+    const iso = new Date(trimmed);
+    return Number.isNaN(iso.getTime()) ? null : iso;
   }
   return null;
 }

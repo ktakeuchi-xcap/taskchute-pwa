@@ -1,4 +1,4 @@
-import { addDays, format } from 'date-fns';
+import { addDays } from 'date-fns';
 import type { CalendarClient } from '@/lib/google/calendar';
 import { CalendarColor } from '@/lib/google/calendar';
 import type { SheetsClient } from '@/lib/google/sheets';
@@ -153,8 +153,8 @@ export async function generateNextWeekRoutines(
   return {
     addedCount: added.length,
     skippedCount,
-    weekStartIso: format(monday, 'yyyy-MM-dd'),
-    weekEndIso: format(weekDays[4]!, 'yyyy-MM-dd'),
+    weekStartIso: formatJst(monday, 'yyyy-MM-dd'),
+    weekEndIso: formatJst(weekDays[4]!, 'yyyy-MM-dd'),
     added,
   };
 }
