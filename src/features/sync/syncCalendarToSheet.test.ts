@@ -20,10 +20,13 @@ const HEADER = [
 
 function mockSheets(values: unknown[][]): SheetsClient & {
   batchUpdates: ValueRange[][];
+  deletedRows: Array<{ sheetId: number; rowIndex: number }>;
 } {
   const batchUpdates: ValueRange[][] = [];
+  const deletedRows: Array<{ sheetId: number; rowIndex: number }> = [];
   return {
     batchUpdates,
+    deletedRows,
     async getValues() {
       return values;
     },
@@ -32,9 +35,11 @@ function mockSheets(values: unknown[][]): SheetsClient & {
     async batchUpdateValues(_id, data) {
       batchUpdates.push(data);
     },
-    async deleteRow() {},
+    async deleteRow(_id, sheetId, rowIndex) {
+      deletedRows.push({ sheetId, rowIndex });
+    },
     async getSheetMetadata() {
-      return [];
+      return [{ sheetId: 42, title: 'TaskDB' }];
     },
   };
 }
@@ -213,5 +218,68 @@ describe('syncCalendarToSheet', () => {
     const updates = sheets.batchUpdates[0]!;
     const estimateUpdate = updates.find((u) => /TaskDB!D2$/.test(u.range));
     expect(estimateUpdate?.values).toEqual([[45]]);
+  });
+
+  it('deletes the TaskDB row when its linked Calendar event is gone (within the sync window)', async () => {
+    const start = new Date('2026-05-25T10:00:00+09:00');
+    const end = new Date('2026-05-25T10:30:00+09:00');
+    const sheets = mockSheets([
+      HEADER,
+      [
+        'tid-e',
+        '削除されたタスク',
+        '',
+        30,
+        dateToSheetSerial(start),
+        dateToSheetSerial(end),
+        '',
+        '',
+        'Not Started',
+        'evt-e',
+      ],
+    ]);
+    // The Calendar event for evt-e no longer exists — .list() returns nothing.
+    const calendar = mockCalendar([]);
+    const result = await syncCalendarToSheet({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+      now: () => new Date('2026-05-25T08:00:00+09:00'),
+    });
+    expect(result.deletedCount).toBe(1);
+    expect(sheets.deletedRows).toEqual([{ sheetId: 42, rowIndex: 1 }]);
+  });
+
+  it('does not delete a row whose occurrence time is outside the sync window', async () => {
+    // Scheduled 30 days from "now" — well outside the ±15d query window, so
+    // its absence from `events` is expected and must not be treated as deletion.
+    const start = new Date('2026-06-24T10:00:00+09:00');
+    const end = new Date('2026-06-24T10:30:00+09:00');
+    const sheets = mockSheets([
+      HEADER,
+      [
+        'tid-f',
+        '遠い未来のタスク',
+        '',
+        30,
+        dateToSheetSerial(start),
+        dateToSheetSerial(end),
+        '',
+        '',
+        'Not Started',
+        'evt-f',
+      ],
+    ]);
+    const calendar = mockCalendar([]);
+    const result = await syncCalendarToSheet({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+      now: () => new Date('2026-05-25T08:00:00+09:00'),
+    });
+    expect(result.deletedCount).toBe(0);
+    expect(sheets.deletedRows).toHaveLength(0);
   });
 });

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { TaskRow } from './TaskRow';
+import { DraggableTaskRow } from './DraggableTaskRow';
 import { EditTaskForm } from './EditTaskForm';
 import type { Task } from '@/features/tasks/types';
 
@@ -9,6 +10,8 @@ interface TaskListProps {
   onDelete?: (taskId: string) => void;
   isDeleting?: boolean;
   emptyMessage?: string;
+  /** When true, each row can be dragged (e.g. onto a date in 予定's day strip). */
+  draggable?: boolean;
 }
 
 export function TaskList({
@@ -17,6 +20,7 @@ export function TaskList({
   onDelete,
   isDeleting = false,
   emptyMessage = '本日のタスクはまだありません',
+  draggable = false,
 }: TaskListProps) {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
@@ -36,6 +40,15 @@ export function TaskList({
             task={task}
             onCancel={() => setEditingTaskId(null)}
             onSaved={() => setEditingTaskId(null)}
+          />
+        ) : draggable ? (
+          <DraggableTaskRow
+            key={task.taskId}
+            task={task}
+            isNext={task.taskId === nextTaskId}
+            onDelete={onDelete}
+            isDeleting={isDeleting}
+            onEdit={() => setEditingTaskId(task.taskId)}
           />
         ) : (
           <TaskRow

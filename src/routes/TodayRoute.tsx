@@ -92,7 +92,7 @@ export function TodayRoute() {
           />
 
           <div className="pt-2">
-            <div className="mb-2 flex items-baseline justify-between">
+            <div className="mb-1 flex items-baseline justify-between">
               <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 本日のタスク一覧
               </h2>
@@ -107,6 +107,21 @@ export function TodayRoute() {
                 </p>
               ) : null}
             </div>
+            {todays.length > 0 ? (
+              <div
+                className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-muted"
+                role="img"
+                aria-label={`本日の工数 ${totalPct}%`}
+              >
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-[width]',
+                    totalPct > 100 ? 'bg-destructive' : 'bg-primary',
+                  )}
+                  style={{ width: `${Math.min(100, totalPct)}%` }}
+                />
+              </div>
+            ) : null}
             <TaskList
               tasks={activeTasks}
               nextTaskId={next?.taskId ?? null}

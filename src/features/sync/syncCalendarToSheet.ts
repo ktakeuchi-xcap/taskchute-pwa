@@ -18,6 +18,7 @@ export interface SyncCalendarDeps {
 
 export interface SyncCalendarResult {
   updatedCount: number;
+  deletedCount: number;
   windowStart: Date;
   windowEnd: Date;
 }
@@ -43,6 +44,13 @@ function columnLetter(col1Based: number): string {
  * the original plan". Their title/time edits are written to
  * ActualStartTime/ActualEndTime instead of Scheduled*, and the estimate is
  * left untouched (it's the plan, not the outcome).
+ *
+ * Also detects tasks whose linked Calendar event was deleted on the Calendar
+ * side and removes the matching TaskDB row to match. This is only checked for
+ * tasks whose own occurrence time falls inside the ±15d query window — a task
+ * scheduled further out simply won't appear in `events` regardless of whether
+ * its Calendar event still exists, so treating that as "deleted" would be a
+ * false positive.
  */
 export async function syncCalendarToSheet(deps: SyncCalendarDeps): Promise<SyncCalendarResult> {
   const { sheets, calendar, spreadsheetId, calendarId } = deps;
@@ -55,7 +63,7 @@ export async function syncCalendarToSheet(deps: SyncCalendarDeps): Promise<SyncC
     calendar.list(calendarId, windowStart, windowEnd),
   ]);
   if (sheetValues.length === 0) {
-    return { updatedCount: 0, windowStart, windowEnd };
+    return { updatedCount: 0, deletedCount: 0, windowStart, windowEnd };
   }
   const headerRow = sheetValues[0]!;
   const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
@@ -64,6 +72,7 @@ export async function syncCalendarToSheet(deps: SyncCalendarDeps): Promise<SyncC
   const sheetByEventId = new Map(
     sheetTasks.filter((t) => t.task.calendarEventId).map((t) => [t.task.calendarEventId, t]),
   );
+  const eventIds = new Set(events.map((e) => e.id));
 
   const cellRange = (col0Based: number, row: number) =>
     `${TASKDB_SHEET}!${columnLetter(col0Based + 1)}${row}`;
@@ -134,5 +143,36 @@ export async function syncCalendarToSheet(deps: SyncCalendarDeps): Promise<SyncC
     await sheets.batchUpdateValues(spreadsheetId, updates);
   }
 
-  return { updatedCount, windowStart, windowEnd };
+  // A task's Calendar event is gone from the fetched window but the task's
+  // own occurrence time is inside that window — the user deleted it on the
+  // Calendar side, so mirror that deletion in TaskDB.
+  const rowsToDelete = sheetTasks
+    .filter((t) => t.task.calendarEventId && !eventIds.has(t.task.calendarEventId))
+    .filter((t) => {
+      const occursAt =
+        t.task.status === TaskStatus.Done
+          ? (t.task.actualStartTime ?? t.task.scheduledStartTime)
+          : t.task.scheduledStartTime;
+      return (
+        occursAt.getTime() >= windowStart.getTime() && occursAt.getTime() <= windowEnd.getTime()
+      );
+    })
+    .map((t) => t.rowNumber);
+
+  let deletedCount = 0;
+  if (rowsToDelete.length > 0) {
+    const sheetsMeta = await sheets.getSheetMetadata(spreadsheetId);
+    const taskDbSheet = sheetsMeta.find((s) => s.title === TASKDB_SHEET);
+    if (taskDbSheet) {
+      // Delete from the bottom up so earlier deletions don't shift the row
+      // numbers of rows still queued for deletion.
+      const sortedDesc = [...rowsToDelete].sort((a, b) => b - a);
+      for (const rowNumber of sortedDesc) {
+        await sheets.deleteRow(spreadsheetId, taskDbSheet.sheetId, rowNumber - 1);
+        deletedCount += 1;
+      }
+    }
+  }
+
+  return { updatedCount, deletedCount, windowStart, windowEnd };
 }

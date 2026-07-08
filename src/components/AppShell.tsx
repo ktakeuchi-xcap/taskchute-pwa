@@ -30,8 +30,9 @@ export function AppShell({ children }: AppShellProps) {
     try {
       const result = await sync.mutateAsync();
       setSyncMessage(
-        `同期完了: タスク ${result.tasksUpdated} 件 / 確認待ち ${result.waitingUpdated} 件更新` +
-          (result.waitingCleared > 0 ? ` / ${result.waitingCleared} 件削除` : ''),
+        `同期完了: タスク ${result.tasksUpdated} 件更新 / 確認待ち ${result.waitingUpdated} 件更新` +
+          (result.tasksDeleted > 0 ? ` / タスク ${result.tasksDeleted} 件削除` : '') +
+          (result.waitingCleared > 0 ? ` / 確認待ち ${result.waitingCleared} 件削除` : ''),
       );
       setTimeout(() => setSyncMessage(null), 3000);
     } catch (err) {

@@ -12,6 +12,7 @@ import { WAITING_QUERY_KEY } from '@/features/waiting/hooks/useWaitingTasks';
 
 export interface SyncSummary {
   tasksUpdated: number;
+  tasksDeleted: number;
   waitingUpdated: number;
   waitingCleared: number;
 }
@@ -49,6 +50,7 @@ export function useSync() {
       ]);
       return {
         tasksUpdated: cal.updatedCount,
+        tasksDeleted: cal.deletedCount,
         waitingUpdated: wait.updatedCount,
         waitingCleared: wait.clearedCount,
       };
