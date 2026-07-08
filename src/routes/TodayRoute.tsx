@@ -1,28 +1,35 @@
 import { useMemo, useState } from 'react';
 import { CalendarPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { CollapsibleSection } from '@/components/ui/collapsible-section';
 import { useTasks } from '@/features/tasks/hooks/useTasks';
 import { useStartTask, useEndTask, useDeleteTask } from '@/features/tasks/hooks/useTaskMutations';
 import { useGenerateRoutines } from '@/features/routines/hooks/useGenerateRoutines';
 import { CurrentTaskCard } from '@/features/tasks/components/CurrentTaskCard';
 import { NextTaskCard } from '@/features/tasks/components/NextTaskCard';
 import { TaskList } from '@/features/tasks/components/TaskList';
+import { DAILY_CAPACITY_MINUTES, sumEstimateMinutes } from '@/features/tasks/workload';
 import { TaskStatus, type Task } from '@/features/tasks/types';
 import { formatJst } from '@/lib/time/jst';
+import { cn } from '@/lib/utils';
 
 function partition(tasks: Task[]): {
   todays: Task[];
+  activeTasks: Task[];
+  doneTasks: Task[];
   current: Task | null;
   next: Task | null;
 } {
   const todayKey = formatJst(new Date(), 'yyyy-MM-dd');
   const todays = tasks.filter((t) => formatJst(t.scheduledStartTime, 'yyyy-MM-dd') === todayKey);
+  const activeTasks = todays.filter((t) => t.status !== TaskStatus.Done);
+  const doneTasks = todays.filter((t) => t.status === TaskStatus.Done);
   const current = tasks.find((t) => t.status === TaskStatus.InProgress) ?? null;
   const next =
     todays.find((t) => t.status === TaskStatus.NotStarted) ??
     tasks.find((t) => t.status === TaskStatus.NotStarted) ??
     null;
-  return { todays, current, next };
+  return { todays, activeTasks, doneTasks, current, next };
 }
 
 export function TodayRoute() {
@@ -33,10 +40,13 @@ export function TodayRoute() {
   const routinesMutation = useGenerateRoutines();
   const [routineFeedback, setRoutineFeedback] = useState<string | null>(null);
 
-  const { todays, current, next } = useMemo(
+  const { todays, activeTasks, doneTasks, current, next } = useMemo(
     () => partition(tasksQuery.data ?? []),
     [tasksQuery.data],
   );
+
+  const totalMinutes = sumEstimateMinutes(todays);
+  const totalPct = Math.round((totalMinutes / DAILY_CAPACITY_MINUTES) * 100);
 
   const handleGenerateRoutines = async () => {
     setRoutineFeedback(null);
@@ -82,15 +92,44 @@ export function TodayRoute() {
           />
 
           <div className="pt-2">
-            <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              本日のタスク一覧
-            </h2>
+            <div className="mb-2 flex items-baseline justify-between">
+              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                本日のタスク一覧
+              </h2>
+              {todays.length > 0 ? (
+                <p
+                  className={cn(
+                    'text-xs',
+                    totalPct > 100 ? 'text-destructive' : 'text-muted-foreground',
+                  )}
+                >
+                  合計{totalMinutes}分（{totalPct}%）
+                </p>
+              ) : null}
+            </div>
             <TaskList
-              tasks={todays}
+              tasks={activeTasks}
               nextTaskId={next?.taskId ?? null}
               onDelete={(taskId) => deleteMutation.mutate(taskId)}
               isDeleting={deleteMutation.isPending}
+              emptyMessage={
+                doneTasks.length > 0
+                  ? '本日のタスクはすべて完了しました'
+                  : '本日のタスクはまだありません'
+              }
             />
+            {doneTasks.length > 0 ? (
+              <div className="mt-2">
+                <CollapsibleSection title={`完了済み（${doneTasks.length}件）`}>
+                  <TaskList
+                    tasks={doneTasks}
+                    nextTaskId={null}
+                    onDelete={(taskId) => deleteMutation.mutate(taskId)}
+                    isDeleting={deleteMutation.isPending}
+                  />
+                </CollapsibleSection>
+              </div>
+            ) : null}
           </div>
 
           <div className="pt-2">

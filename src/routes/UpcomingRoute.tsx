@@ -5,24 +5,26 @@ import { formatJst, WEEKDAY_JA } from '@/lib/time/jst';
 import { useTasks } from '@/features/tasks/hooks/useTasks';
 import { useDeleteTask } from '@/features/tasks/hooks/useTaskMutations';
 import { TaskList } from '@/features/tasks/components/TaskList';
+import { DAILY_CAPACITY_MINUTES, sumEstimateMinutes } from '@/features/tasks/workload';
 import type { Task } from '@/features/tasks/types';
 
-const DAYS_AHEAD = 14;
-/** A day's capacity for the workload bar — 360 minutes (6 hours) = 100%. */
-const CAPACITY_MINUTES = 360;
+const DAYS_BEFORE_TODAY = 3;
+const DAYS_AFTER_TODAY = 14;
+/** Index of "today" within the day list — also used as the default selection (tomorrow). */
+const DEFAULT_SELECTED_INDEX = DAYS_BEFORE_TODAY + 1;
 
 function buildDayList(): Date[] {
   const today = new Date();
-  return Array.from({ length: DAYS_AHEAD }, (_, i) => addDays(today, i + 1));
-}
-
-function sumEstimateMinutes(tasks: Task[] | undefined): number {
-  return (tasks ?? []).reduce((sum, t) => sum + t.estimateMinutes, 0);
+  const start = addDays(today, -DAYS_BEFORE_TODAY);
+  const totalDays = DAYS_BEFORE_TODAY + DAYS_AFTER_TODAY + 1; // +1 for today itself
+  return Array.from({ length: totalDays }, (_, i) => addDays(start, i));
 }
 
 export function UpcomingRoute() {
   const days = useMemo(() => buildDayList(), []);
-  const [selectedKey, setSelectedKey] = useState(() => formatJst(days[0]!, 'yyyy-MM-dd'));
+  const [selectedKey, setSelectedKey] = useState(() =>
+    formatJst(days[DEFAULT_SELECTED_INDEX]!, 'yyyy-MM-dd'),
+  );
 
   const tasksQuery = useTasks();
   const deleteMutation = useDeleteTask();
@@ -42,7 +44,7 @@ export function UpcomingRoute() {
 
   const selectedTasks = tasksByDay.get(selectedKey) ?? [];
   const totalMinutes = sumEstimateMinutes(selectedTasks);
-  const selectedPct = Math.round((totalMinutes / CAPACITY_MINUTES) * 100);
+  const selectedPct = Math.round((totalMinutes / DAILY_CAPACITY_MINUTES) * 100);
   const selectedDate = days.find((d) => formatJst(d, 'yyyy-MM-dd') === selectedKey) ?? days[0]!;
   const selectedLabel = `${formatJst(selectedDate, 'M月d日')}（${WEEKDAY_JA[selectedDate.getDay()]}）`;
 
@@ -54,8 +56,8 @@ export function UpcomingRoute() {
         {days.map((d) => {
           const key = formatJst(d, 'yyyy-MM-dd');
           const dayMinutes = sumEstimateMinutes(tasksByDay.get(key));
-          const pct = Math.min(100, Math.round((dayMinutes / CAPACITY_MINUTES) * 100));
-          const overCapacity = dayMinutes > CAPACITY_MINUTES;
+          const pct = Math.min(100, Math.round((dayMinutes / DAILY_CAPACITY_MINUTES) * 100));
+          const overCapacity = dayMinutes > DAILY_CAPACITY_MINUTES;
           const active = key === selectedKey;
           return (
             <button

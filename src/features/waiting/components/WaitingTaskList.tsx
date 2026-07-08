@@ -1,14 +1,17 @@
+import { useState } from 'react';
 import { useWaitingTasks } from '@/features/waiting/hooks/useWaitingTasks';
 import {
   useRemoveWaitingTask,
   useToggleWaitingComplete,
 } from '@/features/waiting/hooks/useWaitingMutations';
 import { WaitingTaskRow } from './WaitingTaskRow';
+import { EditWaitingForm } from './EditWaitingForm';
 
 export function WaitingTaskList() {
   const query = useWaitingTasks();
   const toggle = useToggleWaitingComplete();
   const remove = useRemoveWaitingTask();
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   if (query.isLoading) {
     return (
@@ -37,15 +40,25 @@ export function WaitingTaskList() {
   return (
     <div className="space-y-2">
       <div className="text-[11px] text-muted-foreground">{active}件 待機中</div>
-      {tasks.map((task) => (
-        <WaitingTaskRow
-          key={task.systemTaskId}
-          task={task}
-          onToggleComplete={(completed) => toggle.mutate({ id: task.systemTaskId, completed })}
-          onRemove={() => remove.mutate(task.systemTaskId)}
-          isPending={toggle.isPending || remove.isPending}
-        />
-      ))}
+      {tasks.map((task) =>
+        editingId === task.systemTaskId ? (
+          <EditWaitingForm
+            key={task.systemTaskId}
+            task={task}
+            onCancel={() => setEditingId(null)}
+            onSaved={() => setEditingId(null)}
+          />
+        ) : (
+          <WaitingTaskRow
+            key={task.systemTaskId}
+            task={task}
+            onToggleComplete={(completed) => toggle.mutate({ id: task.systemTaskId, completed })}
+            onEdit={() => setEditingId(task.systemTaskId)}
+            onRemove={() => remove.mutate(task.systemTaskId)}
+            isPending={toggle.isPending || remove.isPending}
+          />
+        ),
+      )}
     </div>
   );
 }

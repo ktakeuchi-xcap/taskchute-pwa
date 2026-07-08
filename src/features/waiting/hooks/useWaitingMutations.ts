@@ -22,6 +22,24 @@ export function useAddWaitingTask() {
   });
 }
 
+export function useUpdateWaitingTask() {
+  const repo = useWaitingRepository();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      systemTaskId,
+      input,
+    }: {
+      systemTaskId: string;
+      input: WaitingTaskInput;
+    }) => {
+      if (!repo) throw new Error('repository unavailable');
+      return repo.update(systemTaskId, input);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: WAITING_QUERY_KEY }),
+  });
+}
+
 export function useToggleWaitingComplete() {
   const repo = useWaitingRepository();
   const qc = useQueryClient();

@@ -3,21 +3,26 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { WaitingTaskInputSchema } from '@/features/waiting/validators';
-import { useAddWaitingTask } from '@/features/waiting/hooks/useWaitingMutations';
+import { useUpdateWaitingTask } from '@/features/waiting/hooks/useWaitingMutations';
 import { parseDateInputValue, toDateInputValue } from '@/features/waiting/dateInput';
+import type { WaitingTask } from '@/features/waiting/types';
 
-function todayDateValue(): string {
-  return toDateInputValue(new Date());
+interface EditWaitingFormProps {
+  task: WaitingTask;
+  onCancel: () => void;
+  onSaved: () => void;
 }
 
-export function AddWaitingForm() {
-  const [name, setName] = useState('');
-  const [waitingFor, setWaitingFor] = useState('');
-  const [followUp, setFollowUp] = useState(todayDateValue);
+export function EditWaitingForm({ task, onCancel, onSaved }: EditWaitingFormProps) {
+  const [name, setName] = useState(task.taskName);
+  const [waitingFor, setWaitingFor] = useState(task.waitingFor ?? '');
+  const [followUp, setFollowUp] = useState(
+    task.followUpDate ? toDateInputValue(task.followUpDate) : '',
+  );
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
 
-  const mutation = useAddWaitingTask();
+  const mutation = useUpdateWaitingTask();
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -38,27 +43,26 @@ export function AddWaitingForm() {
       return;
     }
     try {
-      await mutation.mutateAsync(result.data);
-      setName('');
-      setWaitingFor('');
-      setFollowUp(todayDateValue());
+      await mutation.mutateAsync({ systemTaskId: task.systemTaskId, input: result.data });
+      onSaved();
     } catch (err) {
       setServerError(err instanceof Error ? err.message : String(err));
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-3 rounded-lg border border-primary/40 bg-card p-3 shadow-sm"
+    >
       <div className="space-y-1.5">
-        <Label htmlFor="waiting-name">
+        <Label htmlFor="edit-waiting-name">
           何を待っていますか？ <span className="text-destructive">*</span>
         </Label>
         <Input
-          id="waiting-name"
-          type="text"
+          id="edit-waiting-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="例：提案書へのフィードバック"
           required
         />
         {fieldErrors.taskName ? (
@@ -68,19 +72,18 @@ export function AddWaitingForm() {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="min-w-0 space-y-1.5">
-          <Label htmlFor="waiting-for">依頼先</Label>
+          <Label htmlFor="edit-waiting-for">依頼先</Label>
           <Input
-            id="waiting-for"
-            type="text"
+            id="edit-waiting-for"
             value={waitingFor}
             onChange={(e) => setWaitingFor(e.target.value)}
             placeholder="例：〇〇さん"
           />
         </div>
         <div className="min-w-0 space-y-1.5">
-          <Label htmlFor="follow-up">フォローアップ日</Label>
+          <Label htmlFor="edit-follow-up">フォローアップ日</Label>
           <Input
-            id="follow-up"
+            id="edit-follow-up"
             type="date"
             value={followUp}
             onChange={(e) => setFollowUp(e.target.value)}
@@ -91,24 +94,23 @@ export function AddWaitingForm() {
         <p className="text-xs text-destructive">{fieldErrors.followUpDate}</p>
       ) : null}
 
-      <Button
-        type="submit"
-        variant="outline"
-        size="lg"
-        className="w-full"
-        disabled={mutation.isPending}
-      >
-        {mutation.isPending ? '追加中…' : '＋ 確認待ちに追加'}
-      </Button>
-
+      <div className="flex gap-2 pt-1">
+        <Button type="submit" className="flex-1" disabled={mutation.isPending}>
+          {mutation.isPending ? '保存中…' : '保存'}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="flex-1"
+          onClick={onCancel}
+          disabled={mutation.isPending}
+        >
+          キャンセル
+        </Button>
+      </div>
       {serverError ? (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
           {serverError}
-        </div>
-      ) : null}
-      {mutation.isSuccess && !mutation.isPending ? (
-        <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-800">
-          確認待ちに追加しました ✓
         </div>
       ) : null}
     </form>

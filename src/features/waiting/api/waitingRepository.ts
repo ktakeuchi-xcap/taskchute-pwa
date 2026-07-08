@@ -11,6 +11,7 @@ import { buildWaitingRow, parseWaitingRows } from './serializers';
 export interface WaitingRepository {
   list(): Promise<WaitingTask[]>;
   add(input: WaitingTaskInput): Promise<WaitingTask>;
+  update(systemTaskId: string, input: WaitingTaskInput): Promise<void>;
   toggleComplete(systemTaskId: string, completed: boolean): Promise<void>;
   remove(systemTaskId: string): Promise<void>;
 }
@@ -111,6 +112,19 @@ export function createWaitingRepository(deps: WaitingRepositoryDeps): WaitingRep
       if (!headerRow) throw new Error('WaitingList has no header row');
       await sheets.appendRows(spreadsheetId, WAITING_SHEET, [buildWaitingRow(headerRow, task)]);
       return task;
+    },
+
+    async update(systemTaskId, input) {
+      const { parsed } = await loadAll();
+      const target = parsed.find((p) => p.task.systemTaskId === systemTaskId);
+      if (!target) throw new Error(`WaitingTask not found: ${systemTaskId}`);
+      if (!target.task.googleTaskId) {
+        throw new Error(`WaitingTask has no linked Google Task: ${systemTaskId}`);
+      }
+      await tasks.patch(target.task.googleTaskId, {
+        title: formatWaitingTitle(input.taskName, input.waitingFor ?? null),
+        due: input.followUpDate ?? null,
+      });
     },
 
     async toggleComplete(systemTaskId, completed) {

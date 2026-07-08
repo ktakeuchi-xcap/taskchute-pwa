@@ -1,6 +1,7 @@
-import { Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formatJst } from '@/lib/time/jst';
 import type { WaitingTask } from '@/features/waiting/types';
@@ -8,6 +9,7 @@ import type { WaitingTask } from '@/features/waiting/types';
 interface WaitingTaskRowProps {
   task: WaitingTask;
   onToggleComplete: (completed: boolean) => void;
+  onEdit: () => void;
   onRemove: () => void;
   isPending: boolean;
 }
@@ -26,6 +28,7 @@ function followUpChip(date: Date | null): { text: string; overdue: boolean } | n
 export function WaitingTaskRow({
   task,
   onToggleComplete,
+  onEdit,
   onRemove,
   isPending,
 }: WaitingTaskRowProps) {
@@ -70,15 +73,27 @@ export function WaitingTaskRow({
               {chip.text}
             </span>
           ) : null}
-          <button
-            type="button"
-            onClick={onRemove}
-            disabled={isPending}
-            className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="削除"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          <div className="flex items-center">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              onClick={onEdit}
+              aria-label="編集"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <button
+              type="button"
+              onClick={onRemove}
+              disabled={isPending}
+              className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="削除"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
     </Card>

@@ -104,7 +104,7 @@ export function RoutineManager() {
         />
 
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label htmlFor="routine-start">開始時刻</Label>
             <Input
               id="routine-start"
@@ -114,7 +114,7 @@ export function RoutineManager() {
               onChange={(e) => setStartTime(e.target.value)}
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label htmlFor="routine-estimate">見積（分）</Label>
             <Input
               id="routine-estimate"
