@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { actualMinutes, aggregateDailyTotals, aggregateMonthlyByCategory } from './aggregation';
+import {
+  actualMinutes,
+  aggregateDailyTotals,
+  aggregateMonthlyByCategory,
+  toPersonMonths,
+} from './aggregation';
 import { TaskStatus, type Task } from '@/features/tasks/types';
 
 let seq = 0;
@@ -97,6 +102,16 @@ describe('aggregateMonthlyByCategory', () => {
     ];
     const result = aggregateMonthlyByCategory(tasks, '2026-06');
     expect(result).toEqual([{ category: '未分類', minutes: 20 }]);
+  });
+});
+
+describe('toPersonMonths', () => {
+  it('treats 160 hours (40h/week × 4 weeks) as exactly 1 person-month', () => {
+    expect(toPersonMonths(160 * 60)).toBe(1);
+  });
+
+  it('scales linearly for partial amounts', () => {
+    expect(toPersonMonths(80 * 60)).toBe(0.5);
   });
 });
 

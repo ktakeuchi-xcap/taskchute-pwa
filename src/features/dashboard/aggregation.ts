@@ -41,6 +41,13 @@ export function aggregateMonthlyByCategory(
     .sort((a, b) => b.minutes - a.minutes);
 }
 
+// 週40時間稼働×4週＝160時間を1人月とする（一般的なSI業界の換算基準）。
+export const MINUTES_PER_PERSON_MONTH = 160 * 60;
+
+export function toPersonMonths(minutes: number): number {
+  return minutes / MINUTES_PER_PERSON_MONTH;
+}
+
 export interface DailyTotal {
   dateKey: string;
   minutes: number;

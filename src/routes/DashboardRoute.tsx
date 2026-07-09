@@ -9,7 +9,11 @@ import { useCategoryColorMap } from '@/features/tasks/hooks/useCategoryColorMap'
 import { categoryDotClassName } from '@/features/tasks/categoryColors';
 import { useUIStore } from '@/store/uiStore';
 import { TaskStatus } from '@/features/tasks/types';
-import { aggregateDailyTotals, aggregateMonthlyByCategory } from '@/features/dashboard/aggregation';
+import {
+  aggregateDailyTotals,
+  aggregateMonthlyByCategory,
+  toPersonMonths,
+} from '@/features/dashboard/aggregation';
 
 const TREND_DAYS = 14;
 
@@ -30,6 +34,11 @@ function formatHoursMinutes(minutes: number): string {
   if (h === 0) return `${m}分`;
   if (m === 0) return `${h}時間`;
   return `${h}時間${m}分`;
+}
+
+// 週40時間×4週＝160時間を1人月とする換算（aggregation.tsのMINUTES_PER_PERSON_MONTHに合わせる）。
+function formatPersonMonths(minutes: number): string {
+  return `${toPersonMonths(minutes).toFixed(2)}人月`;
 }
 
 export function DashboardRoute() {
@@ -217,21 +226,27 @@ export function DashboardRoute() {
                     categoryDotClassName(categoryColorMap.get(c.category)),
                   )}
                 />
-                <span className="w-20 flex-shrink-0 truncate text-xs">{c.category}</span>
+                <span className="w-16 flex-shrink-0 truncate text-xs">{c.category}</span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                   <div
                     className="h-full rounded-full bg-primary transition-[width]"
                     style={{ width: `${Math.round((c.minutes / maxCategoryMinutes) * 100)}%` }}
                   />
                 </div>
-                <span className="w-16 flex-shrink-0 text-right text-xs text-muted-foreground">
-                  {formatHoursMinutes(c.minutes)}
+                <span className="w-24 flex-shrink-0 text-right text-xs text-muted-foreground">
+                  <span className="block">{formatHoursMinutes(c.minutes)}</span>
+                  <span className="block text-[10px]">{formatPersonMonths(c.minutes)}</span>
                 </span>
               </div>
             ))}
             <div className="mt-1 flex items-center justify-between border-t border-border pt-2 text-xs font-medium">
               <span>合計</span>
-              <span>{formatHoursMinutes(monthTotalMinutes)}</span>
+              <span className="text-right">
+                <span className="block">{formatHoursMinutes(monthTotalMinutes)}</span>
+                <span className="block text-[10px] font-normal text-muted-foreground">
+                  {formatPersonMonths(monthTotalMinutes)}
+                </span>
+              </span>
             </div>
           </div>
         )}

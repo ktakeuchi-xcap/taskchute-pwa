@@ -3,7 +3,10 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import App from '@/App';
+import { registerServiceWorker } from '@/pwa/registerServiceWorker';
 import '@/styles/globals.css';
+
+registerServiceWorker();
 
 const queryClient = new QueryClient({
   defaultOptions: {

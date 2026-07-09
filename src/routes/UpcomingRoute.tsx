@@ -20,8 +20,8 @@ import type { Task } from '@/features/tasks/types';
 
 const DAYS_BEFORE_TODAY = 3;
 const DAYS_AFTER_TODAY = 14;
-/** Index of "today" within the day list — also used as the default selection (tomorrow). */
-const DEFAULT_SELECTED_INDEX = DAYS_BEFORE_TODAY + 1;
+/** Index of "today" within the day list — also the default selection. */
+const DEFAULT_SELECTED_INDEX = DAYS_BEFORE_TODAY;
 
 function buildDayList(): Date[] {
   const today = new Date();
