@@ -22,7 +22,12 @@ export function DailyWorkloadGauge({ activeTasks, doneTasks }: DailyWorkloadGaug
   if (totalMinutes === 0 && doneTasks.length === 0 && activeTasks.length === 0) return null;
 
   const totalPct = Math.round((totalMinutes / DAILY_CAPACITY_MINUTES) * 100);
-  const donePct = Math.min(100, (doneMinutes / DAILY_CAPACITY_MINUTES) * 100);
+  // A short completed task can be just a few % of the 360-minute scale — enforce a
+  // minimum visible width so any non-zero "done" amount actually shows as a sliver
+  // instead of rendering indistinguishably thin next to the active segment.
+  const MIN_VISIBLE_PCT = 4;
+  const donePctRaw = (doneMinutes / DAILY_CAPACITY_MINUTES) * 100;
+  const donePct = doneMinutes > 0 ? Math.max(MIN_VISIBLE_PCT, Math.min(100, donePctRaw)) : 0;
   const activePct = Math.min(100 - donePct, (activeMinutes / DAILY_CAPACITY_MINUTES) * 100);
 
   return (
@@ -35,14 +40,16 @@ export function DailyWorkloadGauge({ activeTasks, doneTasks }: DailyWorkloadGaug
           完了{doneMinutes}分 / 合計{totalMinutes}分（{totalPct}%）
         </p>
       </div>
-      <div className="mt-1.5 flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full bg-emerald-500 transition-[width]"
-          style={{ width: `${donePct}%` }}
-        />
+      <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full bg-muted">
+        {donePct > 0 ? (
+          <div
+            className="h-full flex-shrink-0 bg-emerald-500 transition-[width]"
+            style={{ width: `${donePct}%` }}
+          />
+        ) : null}
         <div
           className={cn(
-            'h-full transition-[width]',
+            'h-full flex-shrink-0 transition-[width]',
             totalPct > 100 ? 'bg-destructive' : 'bg-primary',
           )}
           style={{ width: `${activePct}%` }}
