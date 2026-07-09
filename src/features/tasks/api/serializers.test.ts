@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseTaskDbRows, buildTaskRow, formatEventTitle, parseEventTitle } from './serializers';
 import { TASKDB_HEADERS } from './headers';
-import { TaskStatus, type Task } from '@/features/tasks/types';
+import { TaskSource, TaskStatus, type Task } from '@/features/tasks/types';
 import { dateToSheetSerial, formatDateForSheet } from '@/lib/google/sheetDate';
 
 const HEADER = [
@@ -74,6 +74,39 @@ describe('parseTaskDbRows', () => {
     const [parsed] = parseTaskDbRows([HEADER, row]);
     expect(parsed!.task.status).toBe(TaskStatus.NotStarted);
   });
+
+  function makeBaseRowData(start: Date, end: Date): Record<string, unknown> {
+    return {
+      [TASKDB_HEADERS.TaskID]: 'tid-1',
+      [TASKDB_HEADERS.TaskName]: 'Test',
+      [TASKDB_HEADERS.Category]: '',
+      [TASKDB_HEADERS.EstimateMinutes]: 30,
+      [TASKDB_HEADERS.ScheduledStartTime]: dateToSheetSerial(start),
+      [TASKDB_HEADERS.ScheduledEndTime]: dateToSheetSerial(end),
+      [TASKDB_HEADERS.ActualStartTime]: '',
+      [TASKDB_HEADERS.ActualEndTime]: '',
+      [TASKDB_HEADERS.Status]: 'Not Started',
+      [TASKDB_HEADERS.CalendarEventID]: 'evt-1',
+    };
+  }
+
+  it('defaults source to null when the sheet has no Source column', () => {
+    const start = new Date('2026-05-19T10:00:00+09:00');
+    const end = new Date('2026-05-19T10:30:00+09:00');
+    const row = HEADER.map((h) => makeBaseRowData(start, end)[h]);
+    const [parsed] = parseTaskDbRows([HEADER, row]);
+    expect(parsed!.task.source).toBeNull();
+  });
+
+  it('reads Source when the column is present', () => {
+    const start = new Date('2026-05-19T10:00:00+09:00');
+    const end = new Date('2026-05-19T10:30:00+09:00');
+    const headerWithSource = [...HEADER, 'Source'];
+    const rowData: Record<string, unknown> = { ...makeBaseRowData(start, end), Source: 'Meeting' };
+    const row = headerWithSource.map((h) => rowData[h]);
+    const [parsed] = parseTaskDbRows([headerWithSource, row]);
+    expect(parsed!.task.source).toBe(TaskSource.Meeting);
+  });
 });
 
 describe('buildTaskRow', () => {
@@ -103,6 +136,7 @@ describe('buildTaskRow', () => {
       actualEndTime: null,
       status: TaskStatus.NotStarted,
       calendarEventId: 'evt-1',
+      source: null,
     };
     const row = buildTaskRow(reordered, task);
     expect(row[reordered.indexOf(TASKDB_HEADERS.TaskID)]).toBe('tid-1');
@@ -111,6 +145,29 @@ describe('buildTaskRow', () => {
       formatDateForSheet(start),
     );
     expect(row[reordered.indexOf(TASKDB_HEADERS.Status)]).toBe('Not Started');
+  });
+
+  it('writes Source when the column exists, and skips it silently when it does not', () => {
+    const start = new Date('2026-05-19T10:00:00+09:00');
+    const end = new Date('2026-05-19T10:30:00+09:00');
+    const task: Task = {
+      taskId: 'tid-1',
+      taskName: '打ち合わせ',
+      category: null,
+      estimateMinutes: 30,
+      scheduledStartTime: start,
+      scheduledEndTime: end,
+      actualStartTime: null,
+      actualEndTime: null,
+      status: TaskStatus.NotStarted,
+      calendarEventId: 'evt-1',
+      source: TaskSource.Meeting,
+    };
+    expect(() => buildTaskRow(HEADER, task)).not.toThrow();
+
+    const headerWithSource = [...HEADER, 'Source'];
+    const row = buildTaskRow(headerWithSource, task);
+    expect(row[headerWithSource.indexOf('Source')]).toBe('Meeting');
   });
 });
 

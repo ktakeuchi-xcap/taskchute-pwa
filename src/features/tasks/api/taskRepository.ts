@@ -1,7 +1,14 @@
 import { CalendarColor, type CalendarClient } from '@/lib/google/calendar';
 import type { SheetsClient, ValueRange } from '@/lib/google/sheets';
 import { formatDateForSheet } from '@/lib/google/sheetDate';
-import { TaskStatus, type Task, type TaskInput, type CategoryInfo } from '@/features/tasks/types';
+import {
+  TaskSource,
+  TaskStatus,
+  type Task,
+  type TaskInput,
+  type CategoryInfo,
+} from '@/features/tasks/types';
+import { deriveMeetingTaskStatus } from '@/features/tasks/meetingStatus';
 import { buildHeaderIndex, TASKDB_HEADERS, TASKDB_SHEET, SETTINGS_SHEET } from './headers';
 import { buildTaskRow, formatEventTitle, parseTaskDbRows, type TaskWithRow } from './serializers';
 
@@ -44,6 +51,17 @@ function cellAddress(rowNumber: number, col1Based: number): string {
   return `${TASKDB_SHEET}!${columnLetter(col1Based)}${rowNumber}`;
 }
 
+/**
+ * Meeting-sourced tasks are read-only from the app (see meetingStatus.ts) —
+ * the UI never shows edit/start/end/delete controls for them, but this
+ * guards the repository layer too in case a caller bypasses the UI.
+ */
+function assertNotMeeting(task: Task, action: string): void {
+  if (task.source === TaskSource.Meeting) {
+    throw new Error(`Meeting task "${task.taskName}" cannot be ${action} from the app`);
+  }
+}
+
 function defaultGenerateId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -71,8 +89,9 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
     async listTasks() {
       const values = await sheets.getValues(spreadsheetId, TASKDB_SHEET);
       const parsed = parseTaskDbRows(values);
+      const nowValue = now();
       return parsed
-        .map((t) => t.task)
+        .map((t) => deriveMeetingTaskStatus(t.task, nowValue))
         .sort((a, b) => a.scheduledStartTime.getTime() - b.scheduledStartTime.getTime());
     },
 
@@ -144,6 +163,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
         actualEndTime: null,
         status: TaskStatus.NotStarted,
         calendarEventId: event.id,
+        source: null,
       };
 
       await sheets.appendRows(spreadsheetId, TASKDB_SHEET, [buildTaskRow(headerRow, task)]);
@@ -155,6 +175,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
       const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
       const target = tasksWithRow.find((t) => t.task.taskId === taskId);
       if (!target) throw new Error(`Task not found: ${taskId}`);
+      assertNotMeeting(target.task, 'edited');
 
       const startTime = input.startTime ?? target.task.scheduledStartTime;
       const endTime = new Date(startTime.getTime() + input.estimateMinutes * 60_000);
@@ -207,6 +228,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
       const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
       const target = tasksWithRow.find((t) => t.task.taskId === taskId);
       if (!target) throw new Error(`Task not found: ${taskId}`);
+      assertNotMeeting(target.task, 'started');
 
       const startedAt = now();
       const updates: ValueRange[] = [
@@ -238,6 +260,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
       const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
       const target = tasksWithRow.find((t) => t.task.taskId === taskId);
       if (!target) throw new Error(`Task not found: ${taskId}`);
+      assertNotMeeting(target.task, 'ended');
 
       const endedAt = now();
       const updates: ValueRange[] = [
@@ -271,6 +294,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
       const { tasksWithRow } = await loadAll();
       const target = tasksWithRow.find((t) => t.task.taskId === taskId);
       if (!target) throw new Error(`Task not found: ${taskId}`);
+      assertNotMeeting(target.task, 'deleted');
 
       const sheetsMeta = await sheets.getSheetMetadata(spreadsheetId);
       const taskDbSheet = sheetsMeta.find((s) => s.title === TASKDB_SHEET);

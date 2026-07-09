@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { TaskRow } from './TaskRow';
 import { DraggableTaskRow } from './DraggableTaskRow';
 import { EditTaskForm } from './EditTaskForm';
-import type { Task } from '@/features/tasks/types';
+import { TaskSource, type Task } from '@/features/tasks/types';
 
 interface TaskListProps {
   tasks: Task[];
@@ -41,7 +41,7 @@ export function TaskList({
             onCancel={() => setEditingTaskId(null)}
             onSaved={() => setEditingTaskId(null)}
           />
-        ) : draggable ? (
+        ) : draggable && task.source !== TaskSource.Meeting ? (
           <DraggableTaskRow
             key={task.taskId}
             task={task}

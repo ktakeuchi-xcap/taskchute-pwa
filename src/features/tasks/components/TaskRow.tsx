@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formatJst } from '@/lib/time/jst';
-import { TaskStatus, type Task } from '@/features/tasks/types';
+import { TaskSource, TaskStatus, type Task } from '@/features/tasks/types';
 import { useCategoryColorMap } from '@/features/tasks/hooks/useCategoryColorMap';
 import { CategoryTag } from './CategoryTag';
 
@@ -30,6 +30,7 @@ export function TaskRow({
 }: TaskRowProps) {
   const isDone = task.status === TaskStatus.Done;
   const isInProgress = task.status === TaskStatus.InProgress;
+  const isMeeting = task.source === TaskSource.Meeting;
   const categoryColorMap = useCategoryColorMap();
 
   const handleDelete = () => {
@@ -55,10 +56,22 @@ export function TaskRow({
           {task.taskName}
         </div>
         <div className="text-[11px] text-muted-foreground">
-          {formatJst(task.scheduledStartTime, 'HH:mm')} –{' '}
-          {formatJst(task.scheduledEndTime, 'HH:mm')}
-          {' ・ '}
-          {task.estimateMinutes}分
+          {isMeeting ? (
+            <>
+              <span className="rounded bg-violet-100 px-1 py-0.5 text-violet-700">会議</span>
+              {' ・ '}
+            </>
+          ) : null}
+          {isMeeting && task.estimateMinutes === 0 ? (
+            '終日'
+          ) : (
+            <>
+              {formatJst(task.scheduledStartTime, 'HH:mm')} –{' '}
+              {formatJst(task.scheduledEndTime, 'HH:mm')}
+              {' ・ '}
+              {task.estimateMinutes}分
+            </>
+          )}
           {task.category ? (
             <>
               {' ・ '}
@@ -75,7 +88,7 @@ export function TaskRow({
           <span className="text-[11px] text-muted-foreground">未着手</span>
         )}
       </div>
-      {onEdit ? (
+      {onEdit && !isMeeting ? (
         <Button
           variant="ghost"
           size="icon"
@@ -86,7 +99,7 @@ export function TaskRow({
           <Pencil className="h-4 w-4" />
         </Button>
       ) : null}
-      {onDelete ? (
+      {onDelete && !isMeeting ? (
         <Button
           variant="ghost"
           size="icon"

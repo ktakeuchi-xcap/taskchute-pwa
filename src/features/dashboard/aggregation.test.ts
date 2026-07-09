@@ -21,6 +21,7 @@ function makeTask(overrides: Partial<Task>): Task {
     actualEndTime: null,
     status: TaskStatus.NotStarted,
     calendarEventId: 'evt',
+    source: null,
     ...overrides,
   };
 }

@@ -32,6 +32,7 @@ jobs:
           VITE_GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
           VITE_TASKCHUTE_SPREADSHEET_ID: ${{ vars.TASKCHUTE_SPREADSHEET_ID }}
           VITE_TASKCHUTE_CALENDAR_ID: ${{ vars.TASKCHUTE_CALENDAR_ID }}
+          VITE_MEETING_CALENDAR_ID: ${{ vars.MEETING_CALENDAR_ID }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

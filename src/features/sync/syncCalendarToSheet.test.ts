@@ -85,6 +85,8 @@ describe('syncCalendarToSheet', () => {
         start,
         end,
         colorId: null,
+        isAllDay: false,
+        selfResponseStatus: null,
       },
     ]);
     const result = await syncCalendarToSheet({
@@ -126,6 +128,8 @@ describe('syncCalendarToSheet', () => {
         start: new Date('2026-05-25T11:00:00+09:00'),
         end: new Date('2026-05-25T11:30:00+09:00'),
         colorId: null,
+        isAllDay: false,
+        selfResponseStatus: null,
       },
     ]);
     const result = await syncCalendarToSheet({
@@ -170,7 +174,15 @@ describe('syncCalendarToSheet', () => {
       ],
     ]);
     const calendar = mockCalendar([
-      { id: 'evt-d', summary: '完了タスク', start: actualStart, end: actualEnd, colorId: null },
+      {
+        id: 'evt-d',
+        summary: '完了タスク',
+        start: actualStart,
+        end: actualEnd,
+        colorId: null,
+        isAllDay: false,
+        selfResponseStatus: null,
+      },
     ]);
     const result = await syncCalendarToSheet({
       sheets,
@@ -204,7 +216,15 @@ describe('syncCalendarToSheet', () => {
       ],
     ]);
     const calendar = mockCalendar([
-      { id: 'evt-c', summary: 'タスク', start: newStart, end: newEnd, colorId: null },
+      {
+        id: 'evt-c',
+        summary: 'タスク',
+        start: newStart,
+        end: newEnd,
+        colorId: null,
+        isAllDay: false,
+        selfResponseStatus: null,
+      },
     ]);
     const result = await syncCalendarToSheet({
       sheets,

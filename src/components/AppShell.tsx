@@ -33,7 +33,10 @@ export function AppShell({ children }: AppShellProps) {
       setSyncMessage(
         `同期完了: タスク ${result.tasksUpdated} 件更新 / 確認待ち ${result.waitingUpdated} 件更新` +
           (result.tasksDeleted > 0 ? ` / タスク ${result.tasksDeleted} 件削除` : '') +
-          (result.waitingCleared > 0 ? ` / 確認待ち ${result.waitingCleared} 件削除` : ''),
+          (result.waitingCleared > 0 ? ` / 確認待ち ${result.waitingCleared} 件削除` : '') +
+          (result.meetingsAdded > 0 ? ` / 会議 ${result.meetingsAdded} 件追加` : '') +
+          (result.meetingsUpdated > 0 ? ` / 会議 ${result.meetingsUpdated} 件更新` : '') +
+          (result.meetingsDeleted > 0 ? ` / 会議 ${result.meetingsDeleted} 件削除` : ''),
       );
       setTimeout(() => setSyncMessage(null), 3000);
     } catch (err) {

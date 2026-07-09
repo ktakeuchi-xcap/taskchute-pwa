@@ -16,6 +16,10 @@ export interface CalendarEvent {
   start: Date;
   end: Date;
   colorId: string | null;
+  /** All-day events use a date-only start/end with no time-of-day. */
+  isAllDay: boolean;
+  /** The signed-in user's own RSVP, or null if they're not listed as an attendee (e.g. a solo event). */
+  selfResponseStatus: string | null;
 }
 
 export interface CalendarEventInput {
@@ -45,6 +49,7 @@ interface ApiEvent {
   start: { dateTime?: string; date?: string };
   end: { dateTime?: string; date?: string };
   colorId?: string;
+  attendees?: Array<{ self?: boolean; responseStatus?: string }>;
 }
 
 function toEvent(raw: ApiEvent): CalendarEvent {
@@ -57,6 +62,8 @@ function toEvent(raw: ApiEvent): CalendarEvent {
     start: new Date(startStr),
     end: new Date(endStr),
     colorId: raw.colorId ?? null,
+    isAllDay: raw.start.dateTime === undefined,
+    selfResponseStatus: raw.attendees?.find((a) => a.self)?.responseStatus ?? null,
   };
 }
 

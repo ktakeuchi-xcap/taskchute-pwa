@@ -96,6 +96,8 @@ function createMockCalendar(): CalendarClient & {
         start: input.start,
         end: input.end,
         colorId: input.colorId ?? null,
+        isAllDay: false,
+        selfResponseStatus: null,
       };
       inserted.push(event);
       return event;
@@ -108,6 +110,8 @@ function createMockCalendar(): CalendarClient & {
         start: new Date(),
         end: new Date(),
         colorId: null,
+        isAllDay: false,
+        selfResponseStatus: null,
       };
     },
     async delete(_calId, eventId) {
@@ -549,5 +553,75 @@ describe('TaskRepository', () => {
       calendarId: 'cid',
     });
     await expect(repo.deleteTask('missing')).rejects.toThrowError(/not found/);
+  });
+
+  describe('meeting tasks are read-only', () => {
+    const HEADER_WITH_SOURCE = [...HEADER, 'Source'];
+
+    function meetingSheets() {
+      const start = new Date('2026-07-09T10:00:00+09:00');
+      const end = new Date('2026-07-09T10:30:00+09:00');
+      return createMockSheets({
+        TaskDB: [
+          HEADER_WITH_SOURCE,
+          [
+            'tid-m',
+            '定例会議',
+            '',
+            30,
+            dateToSheetSerial(start),
+            dateToSheetSerial(end),
+            '',
+            '',
+            'Not Started',
+            'evt-m',
+            'Meeting',
+          ],
+        ],
+        Settings: [],
+      });
+    }
+
+    it('rejects updateTask', async () => {
+      const repo = createTaskRepository({
+        sheets: meetingSheets(),
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+      await expect(
+        repo.updateTask('tid-m', { taskName: 'x', estimateMinutes: 30 }),
+      ).rejects.toThrowError(/cannot be edited/);
+    });
+
+    it('rejects startTask', async () => {
+      const repo = createTaskRepository({
+        sheets: meetingSheets(),
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+      await expect(repo.startTask('tid-m')).rejects.toThrowError(/cannot be started/);
+    });
+
+    it('rejects endTask', async () => {
+      const repo = createTaskRepository({
+        sheets: meetingSheets(),
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+      await expect(repo.endTask('tid-m')).rejects.toThrowError(/cannot be ended/);
+    });
+
+    it('rejects deleteTask', async () => {
+      const repo = createTaskRepository({
+        sheets: meetingSheets(),
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+      await expect(repo.deleteTask('tid-m')).rejects.toThrowError(/cannot be deleted/);
+    });
   });
 });

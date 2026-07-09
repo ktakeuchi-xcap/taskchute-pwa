@@ -5,6 +5,11 @@ export const TaskStatus = {
 } as const;
 export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];
 
+export const TaskSource = {
+  Meeting: 'Meeting',
+} as const;
+export type TaskSource = (typeof TaskSource)[keyof typeof TaskSource];
+
 export interface Task {
   taskId: string;
   taskName: string;
@@ -16,6 +21,12 @@ export interface Task {
   actualEndTime: Date | null;
   status: TaskStatus;
   calendarEventId: string;
+  /**
+   * null for ordinary app-managed tasks. 'Meeting' for tasks synced in
+   * read-only from the user's personal meeting calendar — those never get
+   * manual start/end/edit/delete from the app (see meetingStatus.ts).
+   */
+  source: TaskSource | null;
 }
 
 export interface TaskInput {

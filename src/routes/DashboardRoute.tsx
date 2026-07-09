@@ -8,7 +8,7 @@ import { useWaitingTasks } from '@/features/waiting/hooks/useWaitingTasks';
 import { useCategoryColorMap } from '@/features/tasks/hooks/useCategoryColorMap';
 import { categoryDotClassName } from '@/features/tasks/categoryColors';
 import { useUIStore } from '@/store/uiStore';
-import { TaskStatus } from '@/features/tasks/types';
+import { TaskSource, TaskStatus } from '@/features/tasks/types';
 import {
   aggregateDailyTotals,
   aggregateMonthlyByCategory,
@@ -64,8 +64,13 @@ export function DashboardRoute() {
     [tasks, todayKey],
   );
   const todaysDoneCount = todaysTasks.filter((t) => t.status === TaskStatus.Done).length;
-  const current = tasks.find((t) => t.status === TaskStatus.InProgress) ?? null;
-  const next = todaysTasks.find((t) => t.status === TaskStatus.NotStarted) ?? null;
+  const current =
+    tasks.find((t) => t.source !== TaskSource.Meeting && t.status === TaskStatus.InProgress) ??
+    null;
+  const next =
+    todaysTasks.find(
+      (t) => t.source !== TaskSource.Meeting && t.status === TaskStatus.NotStarted,
+    ) ?? null;
 
   const activeWaiting = (waitingQuery.data ?? []).filter((w) => !w.completed);
   const overdueWaitingCount = activeWaiting.filter(

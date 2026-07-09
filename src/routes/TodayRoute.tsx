@@ -9,7 +9,7 @@ import { CurrentTaskCard } from '@/features/tasks/components/CurrentTaskCard';
 import { NextTaskCard } from '@/features/tasks/components/NextTaskCard';
 import { TaskList } from '@/features/tasks/components/TaskList';
 import { DailyWorkloadGauge } from '@/features/tasks/components/DailyWorkloadGauge';
-import { TaskStatus, type Task } from '@/features/tasks/types';
+import { TaskSource, TaskStatus, type Task } from '@/features/tasks/types';
 import { formatJst } from '@/lib/time/jst';
 
 function partition(tasks: Task[]): {
@@ -23,10 +23,13 @@ function partition(tasks: Task[]): {
   const todays = tasks.filter((t) => formatJst(t.scheduledStartTime, 'yyyy-MM-dd') === todayKey);
   const activeTasks = todays.filter((t) => t.status !== TaskStatus.Done);
   const doneTasks = todays.filter((t) => t.status === TaskStatus.Done);
-  const current = tasks.find((t) => t.status === TaskStatus.InProgress) ?? null;
+  // Meetings run on the calendar's own clock (see meetingStatus.ts) and never
+  // take over the single manual-task spotlight below.
+  const manualTasks = tasks.filter((t) => t.source !== TaskSource.Meeting);
+  const current = manualTasks.find((t) => t.status === TaskStatus.InProgress) ?? null;
   const next =
-    todays.find((t) => t.status === TaskStatus.NotStarted) ??
-    tasks.find((t) => t.status === TaskStatus.NotStarted) ??
+    todays.find((t) => t.source !== TaskSource.Meeting && t.status === TaskStatus.NotStarted) ??
+    manualTasks.find((t) => t.status === TaskStatus.NotStarted) ??
     null;
   return { todays, activeTasks, doneTasks, current, next };
 }
