@@ -52,7 +52,7 @@ export function AppShell({ children }: AppShellProps) {
           style={{ paddingTop: 'max(env(safe-area-inset-top), 0.75rem)' }}
         >
           <div className="min-w-0">
-            <h1 className="text-lg font-bold tracking-tight">⚡ Taskchute</h1>
+            <h1 className="font-display text-lg font-bold tracking-tight">⚡ Taskchute</h1>
             <p className="text-xs text-muted-foreground">{dateLabel}</p>
           </div>
           <button

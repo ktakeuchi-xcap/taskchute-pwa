@@ -62,6 +62,9 @@ export default {
           'sans-serif',
         ],
         mono: ['"SF Mono"', 'Menlo', 'monospace'],
+        // Resolves to the sans stack by default; the editorial theme
+        // overrides --font-display to a serif (see globals.css).
+        display: ['var(--font-display)', '-apple-system', 'sans-serif'],
       },
     },
   },

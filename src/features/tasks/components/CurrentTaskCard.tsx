@@ -28,7 +28,9 @@ export function CurrentTaskCard({ task, onEnd, isPending }: CurrentTaskCardProps
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1">
           <Badge variant="progress">▶ IN PROGRESS</Badge>
-          <h3 className="mt-1.5 text-base font-semibold leading-tight">{task.taskName}</h3>
+          <h3 className="mt-1.5 font-display text-base font-semibold leading-tight">
+            {task.taskName}
+          </h3>
           <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
             {task.category ? (
               <CategoryTag name={task.category} colorKey={categoryColorMap.get(task.category)} />

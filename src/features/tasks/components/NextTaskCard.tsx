@@ -31,7 +31,7 @@ export function NextTaskCard({ task, onStart, isPending, startDisabled }: NextTa
           <CategoryTag name={task.category} colorKey={categoryColorMap.get(task.category)} />
         ) : null}
       </div>
-      <h3 className="mt-1.5 text-base font-semibold leading-tight">{task.taskName}</h3>
+      <h3 className="mt-1.5 font-display text-base font-semibold leading-tight">{task.taskName}</h3>
       <p className="mt-1 text-xs text-muted-foreground">
         予定: {formatJst(task.scheduledStartTime, 'M/d HH:mm')} ・ {task.estimateMinutes}分
       </p>

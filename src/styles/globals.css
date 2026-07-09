@@ -27,6 +27,244 @@
     --status-in-progress: 38 92% 50%;
     --status-done: 142 71% 45%;
     --status-waiting: 271 91% 65%;
+
+    /* Resolves to the sans stack here; the editorial theme below points
+       this at a display serif instead. Applied via the `font-display`
+       Tailwind utility on a handful of hero headings (app title, the
+       current/next task's name) — see tailwind.config.js. */
+    --font-display: inherit;
+  }
+
+  /*
+   * Editorial theme — near-black canvas, warm off-white type, a terracotta
+   * accent, sharp (near-zero) corners, and a high-contrast display serif for
+   * a handful of hero headings. Selected in 設定 (see ThemePicker.tsx),
+   * applied as `<html data-theme="editorial">` (see themeStore.ts).
+   */
+  :root[data-theme='editorial'] {
+    --background: 20 14% 7%;
+    --foreground: 40 20% 92%;
+    --card: 20 12% 11%;
+    --card-foreground: 40 20% 92%;
+    --primary: 18 62% 46%;
+    --primary-foreground: 40 30% 97%;
+    --secondary: 20 10% 16%;
+    --secondary-foreground: 40 20% 90%;
+    --muted: 20 10% 14%;
+    --muted-foreground: 30 10% 62%;
+    --accent: 20 10% 16%;
+    --accent-foreground: 40 20% 92%;
+    --destructive: 6 65% 48%;
+    --destructive-foreground: 40 30% 97%;
+    --border: 20 10% 22%;
+    --input: 20 10% 22%;
+    --ring: 18 62% 46%;
+    --radius: 0.125rem;
+
+    --status-not-started: 30 8% 45%;
+    --status-in-progress: 32 70% 50%;
+    --status-done: 90 20% 42%;
+    --status-waiting: 280 30% 58%;
+
+    --font-display: 'Bodoni Moda', Georgia, serif;
+  }
+
+  /*
+   * A handful of components use literal Tailwind palette classes (e.g.
+   * `bg-amber-50`) instead of the semantic tokens above — mostly small
+   * status/category accents (in-progress card, "会議" tag, category colors)
+   * that carry meaning via hue, not just mood. Left as one fixed palette
+   * across both themes would look broken here (pale card on a near-black
+   * canvas), so each is individually remapped to a dark-appropriate
+   * equivalent of the same hue. Attribute-selector specificity beats the
+   * plain utility class regardless of layer order, so these don't need
+   * `!important`.
+   */
+  /* red */
+  :root[data-theme='editorial'] .bg-red-50 {
+    background-color: hsl(0 35% 15%);
+  }
+  :root[data-theme='editorial'] .bg-red-100 {
+    background-color: hsl(0 35% 18%);
+  }
+  :root[data-theme='editorial'] .bg-red-400 {
+    background-color: hsl(0 65% 58%);
+  }
+  :root[data-theme='editorial'] .border-red-200 {
+    border-color: hsl(0 40% 32%);
+  }
+  :root[data-theme='editorial'] .text-red-700 {
+    color: hsl(0 65% 72%);
+  }
+
+  /* orange */
+  :root[data-theme='editorial'] .bg-orange-50 {
+    background-color: hsl(24 35% 15%);
+  }
+  :root[data-theme='editorial'] .bg-orange-400 {
+    background-color: hsl(24 70% 55%);
+  }
+  :root[data-theme='editorial'] .border-orange-200 {
+    border-color: hsl(24 40% 32%);
+  }
+  :root[data-theme='editorial'] .text-orange-700 {
+    color: hsl(24 65% 70%);
+  }
+
+  /* amber */
+  :root[data-theme='editorial'] .bg-amber-50 {
+    background-color: hsl(38 30% 15%);
+  }
+  :root[data-theme='editorial'] .bg-amber-100 {
+    background-color: hsl(38 30% 18%);
+  }
+  :root[data-theme='editorial'] .bg-amber-400 {
+    background-color: hsl(38 75% 55%);
+  }
+  :root[data-theme='editorial'] .bg-amber-500 {
+    background-color: hsl(38 75% 52%);
+  }
+  :root[data-theme='editorial'] .border-amber-200 {
+    border-color: hsl(38 40% 32%);
+  }
+  :root[data-theme='editorial'] .border-amber-300 {
+    border-color: hsl(38 45% 38%);
+  }
+  :root[data-theme='editorial'] .ring-amber-200 {
+    --tw-ring-color: hsl(38 40% 32%);
+  }
+  :root[data-theme='editorial'] .text-amber-700 {
+    color: hsl(38 70% 72%);
+  }
+  :root[data-theme='editorial'] .text-amber-800 {
+    color: hsl(38 65% 65%);
+  }
+
+  /* emerald */
+  :root[data-theme='editorial'] .bg-emerald-50 {
+    background-color: hsl(152 25% 14%);
+  }
+  :root[data-theme='editorial'] .bg-emerald-400 {
+    background-color: hsl(152 45% 50%);
+  }
+  :root[data-theme='editorial'] .bg-emerald-500 {
+    background-color: hsl(152 45% 45%);
+  }
+  :root[data-theme='editorial'] .border-emerald-300 {
+    border-color: hsl(152 30% 32%);
+  }
+  :root[data-theme='editorial'] .text-emerald-700 {
+    color: hsl(152 40% 68%);
+  }
+  :root[data-theme='editorial'] .text-emerald-800 {
+    color: hsl(152 40% 60%);
+  }
+
+  /* teal */
+  :root[data-theme='editorial'] .bg-teal-50 {
+    background-color: hsl(173 25% 14%);
+  }
+  :root[data-theme='editorial'] .bg-teal-400 {
+    background-color: hsl(173 45% 50%);
+  }
+  :root[data-theme='editorial'] .border-teal-200 {
+    border-color: hsl(173 30% 32%);
+  }
+  :root[data-theme='editorial'] .text-teal-700 {
+    color: hsl(173 40% 68%);
+  }
+
+  /* blue */
+  :root[data-theme='editorial'] .bg-blue-50 {
+    background-color: hsl(217 30% 15%);
+  }
+  :root[data-theme='editorial'] .bg-blue-400 {
+    background-color: hsl(217 60% 60%);
+  }
+  :root[data-theme='editorial'] .border-blue-200 {
+    border-color: hsl(217 35% 34%);
+  }
+  :root[data-theme='editorial'] .text-blue-700 {
+    color: hsl(217 55% 75%);
+  }
+  :root[data-theme='editorial'] .text-blue-600 {
+    color: hsl(217 55% 70%);
+  }
+
+  /* indigo */
+  :root[data-theme='editorial'] .bg-indigo-50 {
+    background-color: hsl(239 30% 16%);
+  }
+  :root[data-theme='editorial'] .bg-indigo-400 {
+    background-color: hsl(239 55% 62%);
+  }
+  :root[data-theme='editorial'] .border-indigo-200 {
+    border-color: hsl(239 35% 35%);
+  }
+  :root[data-theme='editorial'] .text-indigo-700 {
+    color: hsl(239 55% 76%);
+  }
+
+  /* purple */
+  :root[data-theme='editorial'] .bg-purple-50 {
+    background-color: hsl(271 28% 16%);
+  }
+  :root[data-theme='editorial'] .bg-purple-400 {
+    background-color: hsl(271 50% 62%);
+  }
+  :root[data-theme='editorial'] .border-purple-200 {
+    border-color: hsl(271 32% 35%);
+  }
+  :root[data-theme='editorial'] .text-purple-700 {
+    color: hsl(271 50% 76%);
+  }
+
+  /* violet */
+  :root[data-theme='editorial'] .bg-violet-50 {
+    background-color: hsl(262 25% 15%);
+  }
+  :root[data-theme='editorial'] .bg-violet-100 {
+    background-color: hsl(262 25% 18%);
+  }
+  :root[data-theme='editorial'] .border-violet-200 {
+    border-color: hsl(262 32% 34%);
+  }
+  :root[data-theme='editorial'] .text-violet-700 {
+    color: hsl(262 50% 75%);
+  }
+  :root[data-theme='editorial'] .text-violet-900 {
+    color: hsl(262 30% 88%);
+  }
+
+  /* pink */
+  :root[data-theme='editorial'] .bg-pink-50 {
+    background-color: hsl(330 30% 16%);
+  }
+  :root[data-theme='editorial'] .bg-pink-400 {
+    background-color: hsl(330 55% 62%);
+  }
+  :root[data-theme='editorial'] .border-pink-200 {
+    border-color: hsl(330 35% 35%);
+  }
+  :root[data-theme='editorial'] .text-pink-700 {
+    color: hsl(330 50% 76%);
+  }
+
+  /* gray (warm-tinted to match the theme's neutral, rather than cool gray) */
+  :root[data-theme='editorial'] .bg-gray-100 {
+    background-color: hsl(20 8% 16%);
+  }
+  :root[data-theme='editorial'] .bg-gray-300 {
+    background-color: hsl(20 6% 40%);
+  }
+  :root[data-theme='editorial'] .bg-gray-400 {
+    background-color: hsl(20 6% 48%);
+  }
+  :root[data-theme='editorial'] .border-gray-200 {
+    border-color: hsl(20 8% 28%);
+  }
+  :root[data-theme='editorial'] .text-gray-700 {
+    color: hsl(20 8% 75%);
   }
 
   * {

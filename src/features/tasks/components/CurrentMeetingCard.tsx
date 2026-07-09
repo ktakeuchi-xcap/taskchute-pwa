@@ -21,7 +21,7 @@ export function CurrentMeetingCard({ task }: CurrentMeetingCardProps) {
       <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
         会議中
       </span>
-      <h3 className="mt-1.5 text-base font-semibold leading-tight">{task.taskName}</h3>
+      <h3 className="mt-1.5 font-display text-base font-semibold leading-tight">{task.taskName}</h3>
       <div className="mt-3">
         <TaskTimer startedAt={startedAt} estimateMinutes={task.estimateMinutes} />
       </div>

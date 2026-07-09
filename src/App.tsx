@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useUIStore } from '@/store/uiStore';
+import { useThemeStore, applyTheme } from '@/store/themeStore';
 import { AppShell } from '@/components/AppShell';
 import { AuthGate } from '@/features/auth/AuthGate';
 import { TodayRoute } from '@/routes/TodayRoute';
@@ -20,7 +22,14 @@ const ROUTES = {
 
 export default function App() {
   const tab = useUIStore((s) => s.currentTab);
+  const theme = useThemeStore((s) => s.theme);
   const Route = ROUTES[tab];
+
+  // Applied above AuthGate so the login screen reflects the chosen theme too.
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
   return (
     <AuthGate>
       <AppShell>
