@@ -8,10 +8,9 @@ import { useGenerateRoutines } from '@/features/routines/hooks/useGenerateRoutin
 import { CurrentTaskCard } from '@/features/tasks/components/CurrentTaskCard';
 import { NextTaskCard } from '@/features/tasks/components/NextTaskCard';
 import { TaskList } from '@/features/tasks/components/TaskList';
-import { DAILY_CAPACITY_MINUTES, sumEstimateMinutes } from '@/features/tasks/workload';
+import { DailyWorkloadGauge } from '@/features/tasks/components/DailyWorkloadGauge';
 import { TaskStatus, type Task } from '@/features/tasks/types';
 import { formatJst } from '@/lib/time/jst';
-import { cn } from '@/lib/utils';
 
 function partition(tasks: Task[]): {
   todays: Task[];
@@ -40,13 +39,10 @@ export function TodayRoute() {
   const routinesMutation = useGenerateRoutines();
   const [routineFeedback, setRoutineFeedback] = useState<string | null>(null);
 
-  const { todays, activeTasks, doneTasks, current, next } = useMemo(
+  const { activeTasks, doneTasks, current, next } = useMemo(
     () => partition(tasksQuery.data ?? []),
     [tasksQuery.data],
   );
-
-  const totalMinutes = sumEstimateMinutes(todays);
-  const totalPct = Math.round((totalMinutes / DAILY_CAPACITY_MINUTES) * 100);
 
   const handleGenerateRoutines = async () => {
     setRoutineFeedback(null);
@@ -79,6 +75,8 @@ export function TodayRoute() {
         </div>
       ) : (
         <>
+          <DailyWorkloadGauge activeTasks={activeTasks} doneTasks={doneTasks} />
+
           <CurrentTaskCard
             task={current}
             onEnd={() => current && endMutation.mutate(current.taskId)}
@@ -92,36 +90,9 @@ export function TodayRoute() {
           />
 
           <div className="pt-2">
-            <div className="mb-1 flex items-baseline justify-between">
-              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                本日のタスク一覧
-              </h2>
-              {todays.length > 0 ? (
-                <p
-                  className={cn(
-                    'text-xs',
-                    totalPct > 100 ? 'text-destructive' : 'text-muted-foreground',
-                  )}
-                >
-                  合計{totalMinutes}分（{totalPct}%）
-                </p>
-              ) : null}
-            </div>
-            {todays.length > 0 ? (
-              <div
-                className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-muted"
-                role="img"
-                aria-label={`本日の工数 ${totalPct}%`}
-              >
-                <div
-                  className={cn(
-                    'h-full rounded-full transition-[width]',
-                    totalPct > 100 ? 'bg-destructive' : 'bg-primary',
-                  )}
-                  style={{ width: `${Math.min(100, totalPct)}%` }}
-                />
-              </div>
-            ) : null}
+            <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              本日のタスク一覧
+            </h2>
             <TaskList
               tasks={activeTasks}
               nextTaskId={next?.taskId ?? null}
