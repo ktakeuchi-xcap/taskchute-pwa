@@ -4,6 +4,10 @@ import { cn } from '@/lib/utils';
 import { WEEKDAY_JA } from '@/lib/time/jst';
 import type { ScheduleKind } from '@/features/routines/api/scheduleFormat';
 
+// 「毎週◯曜日」の生成処理は来週の月〜金しか対象にしないため（ISS-09）、
+// 土・日はそもそも選択できないようにする。
+const WEEKDAY_ROUTINE_OPTIONS = WEEKDAY_JA.filter((w) => w !== '日' && w !== '土');
+
 interface ScheduleFieldsProps {
   idPrefix: string;
   kind: ScheduleKind;
@@ -63,7 +67,7 @@ export function ScheduleFields({
         <div className="space-y-1.5">
           <Label>{allowMultipleWeekdays ? '曜日（複数選択可）' : '曜日'}</Label>
           <div className="flex flex-wrap gap-1.5">
-            {WEEKDAY_JA.map((w) => {
+            {WEEKDAY_ROUTINE_OPTIONS.map((w) => {
               const active = selectedWeekdays.includes(w);
               return (
                 <button
@@ -83,6 +87,9 @@ export function ScheduleFields({
               );
             })}
           </div>
+          <p className="text-[11px] text-muted-foreground">
+            土・日は生成対象外のため選択できません
+          </p>
         </div>
       ) : null}
 
