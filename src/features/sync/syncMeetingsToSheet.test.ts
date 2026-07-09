@@ -20,13 +20,17 @@ const HEADER = [
 ];
 
 function mockSheets(
-  taskDbValues: unknown[][],
+  initialTaskDbValues: unknown[][],
   rulesValues: unknown[][] = [],
 ): SheetsClient & {
   appended: unknown[][][];
   batchUpdates: ValueRange[][];
   deletedRows: Array<{ sheetId: number; rowIndex: number }>;
 } {
+  // A live, mutating copy — deleteRow/appendRows must be reflected in the
+  // next getValues call for the dedup pre-pass's "delete then re-read" flow
+  // to be testable.
+  let taskDbValues = initialTaskDbValues.map((row) => [...row]);
   const appended: unknown[][][] = [];
   const batchUpdates: ValueRange[][] = [];
   const deletedRows: Array<{ sheetId: number; rowIndex: number }> = [];
@@ -39,6 +43,7 @@ function mockSheets(
     },
     async appendRows(_id, _range, rows) {
       appended.push(rows);
+      taskDbValues = [...taskDbValues, ...rows];
     },
     async updateRange() {},
     async batchUpdateValues(_id, data) {
@@ -46,6 +51,7 @@ function mockSheets(
     },
     async deleteRow(_id, sheetId, rowIndex) {
       deletedRows.push({ sheetId, rowIndex });
+      taskDbValues = taskDbValues.filter((_, i) => i !== rowIndex);
     },
     async getSheetMetadata() {
       return [{ sheetId: 42, title: 'TaskDB' }];
@@ -284,6 +290,38 @@ describe('syncMeetingsToSheet', () => {
     expect(result.addedCount).toBe(1);
     const [row] = sheets.appended[0]!;
     expect(row![HEADER.indexOf(TASKDB_HEADERS.Category)]).toBe('');
+  });
+
+  it('self-heals a duplicate row (e.g. from a cross-device race) by deleting the extra one', async () => {
+    const start = new Date('2026-07-09T10:00:00+09:00');
+    const end = new Date('2026-07-09T10:30:00+09:00');
+    const duplicateRow = (taskId: string) => [
+      taskId,
+      '重複した会議',
+      '',
+      30,
+      dateToSheetSerial(start),
+      dateToSheetSerial(end),
+      '',
+      '',
+      'Not Started',
+      'evt-dup',
+      'Meeting',
+    ];
+    const sheets = mockSheets([HEADER, duplicateRow('tid-a'), duplicateRow('tid-b')]);
+    const calendar = mockCalendar([
+      baseEvent({ id: 'evt-dup', summary: '重複した会議', start, end }),
+    ]);
+    const result = await syncMeetingsToSheet({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      meetingCalendarId: 'me@example.com',
+    });
+    // Row 2 (the earlier one, tid-a) is kept; row 3 (tid-b) is deleted.
+    expect(sheets.deletedRows).toEqual([{ sheetId: 42, rowIndex: 2 }]);
+    expect(result.deletedCount).toBeGreaterThanOrEqual(1);
+    expect(sheets.appended).toHaveLength(0);
   });
 
   it('ignores ordinary (non-meeting) TaskDB rows entirely', async () => {

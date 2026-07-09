@@ -2,6 +2,10 @@ import { useEffect, useRef } from 'react';
 import { useSync } from './useSync';
 
 const AUTO_SYNC_INTERVAL_MS = 30_000;
+// Randomized per-tick so two devices that happened to mount within moments
+// of each other don't stay in lockstep forever, repeatedly hitting the
+// sync lock (syncLock.ts) at the exact same moment every cycle.
+const AUTO_SYNC_JITTER_MS = 5_000;
 
 /**
  * Runs the Calendar<->Sheet reconciliation automatically — on mount, on an
@@ -20,11 +24,17 @@ export function useAutoSync() {
   useEffect(() => {
     mutateRef.current();
 
-    const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        mutateRef.current();
-      }
-    }, AUTO_SYNC_INTERVAL_MS);
+    let timeoutId: number;
+    const scheduleNext = () => {
+      const delay = AUTO_SYNC_INTERVAL_MS + Math.random() * AUTO_SYNC_JITTER_MS;
+      timeoutId = window.setTimeout(() => {
+        if (document.visibilityState === 'visible') {
+          mutateRef.current();
+        }
+        scheduleNext();
+      }, delay);
+    };
+    scheduleNext();
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
@@ -34,7 +44,7 @@ export function useAutoSync() {
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      window.clearInterval(id);
+      window.clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);

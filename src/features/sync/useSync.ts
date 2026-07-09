@@ -8,6 +8,7 @@ import { env } from '@/lib/env';
 import { syncCalendarToSheet } from './syncCalendarToSheet';
 import { syncMeetingsToSheet } from './syncMeetingsToSheet';
 import { syncWaitingFromTasks } from './syncWaitingFromTasks';
+import { releaseSyncLock, tryAcquireSyncLock } from './syncLock';
 import { TASKS_QUERY_KEY } from '@/features/tasks/hooks/useTasks';
 import { WAITING_QUERY_KEY } from '@/features/waiting/hooks/useWaitingTasks';
 
@@ -53,43 +54,65 @@ export function useSync() {
 
       const run = (async () => {
         if (!deps) throw new Error('not authenticated');
-        // syncCalendarToSheet and syncMeetingsToSheet both mutate TaskDB by
-        // row number computed from their own snapshot of the sheet. Running
-        // them concurrently let one's row deletions shift positions out from
-        // under the other's stale row numbers, occasionally deleting the
-        // wrong rows (meeting tasks would vanish). They must run one at a
-        // time; the WaitingList sync touches a different sheet and stays
-        // parallel.
-        const [cal, wait] = await Promise.all([
-          syncCalendarToSheet({
-            sheets: deps.sheets,
-            calendar: deps.calendar,
-            spreadsheetId: deps.spreadsheetId,
-            calendarId: deps.calendarId,
-          }),
-          syncWaitingFromTasks({
-            sheets: deps.sheets,
-            tasks: deps.tasks,
-            spreadsheetId: deps.spreadsheetId,
-          }),
-        ]);
-        const meetings = deps.meetingCalendarId
-          ? await syncMeetingsToSheet({
+        const empty: SyncSummary = {
+          tasksUpdated: 0,
+          tasksDeleted: 0,
+          meetingsAdded: 0,
+          meetingsUpdated: 0,
+          meetingsDeleted: 0,
+          waitingUpdated: 0,
+          waitingCleared: 0,
+        };
+
+        // The in-flight guard above only coalesces calls within this one
+        // browser tab/process — it can't see another device or tab running
+        // its own independent auto-sync loop. This spreadsheet-backed lock
+        // covers that case: if another device claimed it recently, skip this
+        // run entirely rather than racing it (see syncLock.ts for details).
+        const acquired = await tryAcquireSyncLock(deps.sheets, deps.spreadsheetId, new Date());
+        if (!acquired) return empty;
+
+        try {
+          // syncCalendarToSheet and syncMeetingsToSheet both mutate TaskDB by
+          // row number computed from their own snapshot of the sheet.
+          // Running them concurrently let one's row deletions shift
+          // positions out from under the other's stale row numbers,
+          // occasionally deleting the wrong rows (meeting tasks would
+          // vanish). They must run one at a time; the WaitingList sync
+          // touches a different sheet and stays parallel.
+          const [cal, wait] = await Promise.all([
+            syncCalendarToSheet({
               sheets: deps.sheets,
               calendar: deps.calendar,
               spreadsheetId: deps.spreadsheetId,
-              meetingCalendarId: deps.meetingCalendarId,
-            })
-          : { addedCount: 0, updatedCount: 0, deletedCount: 0 };
-        return {
-          tasksUpdated: cal.updatedCount,
-          tasksDeleted: cal.deletedCount,
-          meetingsAdded: meetings.addedCount,
-          meetingsUpdated: meetings.updatedCount,
-          meetingsDeleted: meetings.deletedCount,
-          waitingUpdated: wait.updatedCount,
-          waitingCleared: wait.clearedCount,
-        };
+              calendarId: deps.calendarId,
+            }),
+            syncWaitingFromTasks({
+              sheets: deps.sheets,
+              tasks: deps.tasks,
+              spreadsheetId: deps.spreadsheetId,
+            }),
+          ]);
+          const meetings = deps.meetingCalendarId
+            ? await syncMeetingsToSheet({
+                sheets: deps.sheets,
+                calendar: deps.calendar,
+                spreadsheetId: deps.spreadsheetId,
+                meetingCalendarId: deps.meetingCalendarId,
+              })
+            : { addedCount: 0, updatedCount: 0, deletedCount: 0 };
+          return {
+            tasksUpdated: cal.updatedCount,
+            tasksDeleted: cal.deletedCount,
+            meetingsAdded: meetings.addedCount,
+            meetingsUpdated: meetings.updatedCount,
+            meetingsDeleted: meetings.deletedCount,
+            waitingUpdated: wait.updatedCount,
+            waitingCleared: wait.clearedCount,
+          };
+        } finally {
+          await releaseSyncLock(deps.sheets, deps.spreadsheetId).catch(() => {});
+        }
       })();
 
       inFlightRef.current = run;

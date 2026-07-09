@@ -55,6 +55,31 @@ function estimateMinutesFor(event: CalendarEvent): number {
 }
 
 /**
+ * Two rows sharing the same calendarEventId shouldn't happen, but a rare
+ * cross-device sync race (see syncLock.ts) could still produce one on an
+ * unlucky timing coincidence. This is a self-healing safety net: whenever
+ * found, keep the earliest row and mark the rest for deletion.
+ */
+function findDuplicateRowNumbers(
+  meetingTasks: Array<{ task: { calendarEventId: string }; rowNumber: number }>,
+): number[] {
+  const rowsByEventId = new Map<string, number[]>();
+  for (const t of meetingTasks) {
+    if (!t.task.calendarEventId) continue;
+    const rows = rowsByEventId.get(t.task.calendarEventId) ?? [];
+    rows.push(t.rowNumber);
+    rowsByEventId.set(t.task.calendarEventId, rows);
+  }
+  const toDelete: number[] = [];
+  for (const rows of rowsByEventId.values()) {
+    if (rows.length <= 1) continue;
+    const sorted = [...rows].sort((a, b) => a - b);
+    toDelete.push(...sorted.slice(1));
+  }
+  return toDelete;
+}
+
+/**
  * One-way (Calendar -> Sheet) sync for the user's personal meeting calendar.
  * Never patches or deletes anything on the Calendar side — meeting tasks are
  * read-only from the app (see meetingStatus.ts for how their status is
@@ -72,22 +97,44 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
   const windowStart = addDays(now, -SYNC_WINDOW_DAYS);
   const windowEnd = addDays(now, SYNC_WINDOW_DAYS);
 
-  const [sheetValues, events] = await Promise.all([
+  const [sheetValuesInitial, events] = await Promise.all([
     sheets.getValues(spreadsheetId, TASKDB_SHEET),
     calendar.list(meetingCalendarId, windowStart, windowEnd),
   ]);
+  let sheetValues = sheetValuesInitial;
   if (sheetValues.length === 0) {
     return { addedCount: 0, updatedCount: 0, deletedCount: 0 };
   }
-  const headerRow = sheetValues[0]!;
+  let headerRow = sheetValues[0]!;
   const sourceCol = headerRow.findIndex((cell) => cell === SOURCE_HEADER);
   if (sourceCol === -1) {
     return { addedCount: 0, updatedCount: 0, deletedCount: 0 };
   }
-  const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
-  const meetingTasks = parseTaskDbRows(sheetValues).filter(
+  let meetingTasks = parseTaskDbRows(sheetValues).filter(
     (t) => t.task.source === TaskSource.Meeting,
   );
+
+  let dedupedCount = 0;
+  const duplicateRows = findDuplicateRowNumbers(meetingTasks);
+  if (duplicateRows.length > 0) {
+    const sheetsMeta = await sheets.getSheetMetadata(spreadsheetId);
+    const taskDbSheet = sheetsMeta.find((s) => s.title === TASKDB_SHEET);
+    if (taskDbSheet) {
+      for (const rowNumber of [...duplicateRows].sort((a, b) => b - a)) {
+        await sheets.deleteRow(spreadsheetId, taskDbSheet.sheetId, rowNumber - 1);
+        dedupedCount += 1;
+      }
+      // Row numbers shifted after deleting — re-read before doing anything
+      // else so the rest of this function isn't working from stale numbers.
+      sheetValues = await sheets.getValues(spreadsheetId, TASKDB_SHEET);
+      headerRow = sheetValues[0]!;
+      meetingTasks = parseTaskDbRows(sheetValues).filter(
+        (t) => t.task.source === TaskSource.Meeting,
+      );
+    }
+  }
+
+  const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
   const rules = await listMeetingCategoryRules(sheets, spreadsheetId);
   const ruleBySeriesId = new Map(rules.map((r) => [r.recurringEventId, r]));
 
@@ -191,5 +238,9 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
     }
   }
 
-  return { addedCount: rowsToAppend.length, updatedCount, deletedCount };
+  return {
+    addedCount: rowsToAppend.length,
+    updatedCount,
+    deletedCount: deletedCount + dedupedCount,
+  };
 }
