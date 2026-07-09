@@ -22,7 +22,7 @@ export function DailyWorkloadGauge({ activeTasks, doneTasks }: DailyWorkloadGaug
   if (totalMinutes === 0 && doneTasks.length === 0 && activeTasks.length === 0) return null;
 
   const totalPct = Math.round((totalMinutes / DAILY_CAPACITY_MINUTES) * 100);
-  // A short completed task can be just a few % of the 360-minute scale — enforce a
+  // A short completed task can be just a few % of the full-day scale — enforce a
   // minimum visible width so any non-zero "done" amount actually shows as a sliver
   // instead of rendering indistinguishably thin next to the active segment.
   const MIN_VISIBLE_PCT = 4;

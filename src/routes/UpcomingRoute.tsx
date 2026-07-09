@@ -67,7 +67,7 @@ function DayButton({ date, dateKey, active, dayMinutes, onSelect }: DayButtonPro
         {WEEKDAY_JA[date.getDay()]}
       </span>
       <span className="font-semibold">{formatJst(date, 'M/d')}</span>
-      {/* 工数バー：1日の許容量(360分=6時間)を100%とした充填率 */}
+      {/* 工数バー：1日の許容量(480分=8時間)を100%とした充填率 */}
       <div
         className={cn(
           'mt-0.5 h-1 w-8 overflow-hidden rounded-full',
