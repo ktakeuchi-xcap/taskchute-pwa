@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { useUIStore } from '@/store/uiStore';
 import { useTasks } from '@/features/tasks/hooks/useTasks';
 import { useEndTask } from '@/features/tasks/hooks/useTaskMutations';
-import { TaskStatus } from '@/features/tasks/types';
+import { TaskSource, TaskStatus } from '@/features/tasks/types';
 import { TaskTimer } from './TaskTimer';
 
 /**
@@ -24,6 +24,7 @@ export function FloatingTimer() {
 
   if (!current || currentTab === 'today') return null;
 
+  const isMeeting = current.source === TaskSource.Meeting;
   const startedAt = current.actualStartTime ?? current.scheduledStartTime;
 
   if (minimized) {
@@ -46,7 +47,7 @@ export function FloatingTimer() {
       style={{ bottom: 'calc(env(safe-area-inset-bottom) + 4.75rem)' }}
     >
       <div className="flex items-center justify-between gap-2">
-        <Badge variant="progress">▶ 進行中</Badge>
+        <Badge variant="progress">{isMeeting ? '▶ 会議中' : '▶ 進行中'}</Badge>
         <div className="flex items-center gap-1">
           <Button
             type="button"
@@ -72,16 +73,18 @@ export function FloatingTimer() {
       </div>
       <p className="mt-1 truncate text-sm font-semibold">{current.taskName}</p>
       <TaskTimer startedAt={startedAt} estimateMinutes={current.estimateMinutes} />
-      <Button
-        type="button"
-        variant="destructive"
-        size="sm"
-        className="mt-2 w-full"
-        onClick={() => endMutation.mutate(current.taskId)}
-        disabled={endMutation.isPending}
-      >
-        ■ 終了
-      </Button>
+      {isMeeting ? null : (
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          className="mt-2 w-full"
+          onClick={() => endMutation.mutate(current.taskId)}
+          disabled={endMutation.isPending}
+        >
+          ■ 終了
+        </Button>
+      )}
     </div>
   );
 }
