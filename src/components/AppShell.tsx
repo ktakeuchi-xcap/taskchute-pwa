@@ -1,4 +1,4 @@
-import { Calendar, CalendarDays, Plus, Users, Settings, RefreshCw } from 'lucide-react';
+import { Calendar, CalendarDays, Plus, Users, Settings, RefreshCw, BarChart3 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useUIStore, type Tab } from '@/store/uiStore';
@@ -10,6 +10,7 @@ const TABS: ReadonlyArray<{ id: Tab; label: string; Icon: typeof Calendar }> = [
   { id: 'upcoming', label: '予定', Icon: CalendarDays },
   { id: 'add', label: '追加', Icon: Plus },
   { id: 'waiting', label: '確認待ち', Icon: Users },
+  { id: 'dashboard', label: '実績', Icon: BarChart3 },
   { id: 'settings', label: '設定', Icon: Settings },
 ];
 

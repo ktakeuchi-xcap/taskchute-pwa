@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type Tab = 'today' | 'upcoming' | 'add' | 'waiting' | 'settings';
+export type Tab = 'today' | 'upcoming' | 'add' | 'waiting' | 'dashboard' | 'settings';
 
 interface UIState {
   currentTab: Tab;
