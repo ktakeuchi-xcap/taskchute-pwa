@@ -63,6 +63,7 @@ function createCalendar(): CalendarClient & { inserted: CalendarEvent[] } {
         colorId: input.colorId ?? null,
         isAllDay: false,
         selfResponseStatus: null,
+        recurringEventId: null,
       };
       inserted.push(ev);
       return ev;
@@ -76,6 +77,7 @@ function createCalendar(): CalendarClient & { inserted: CalendarEvent[] } {
         colorId: null,
         isAllDay: false,
         selfResponseStatus: null,
+        recurringEventId: null,
       };
     },
     async delete() {},

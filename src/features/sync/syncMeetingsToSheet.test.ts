@@ -19,7 +19,10 @@ const HEADER = [
   'Source',
 ];
 
-function mockSheets(values: unknown[][]): SheetsClient & {
+function mockSheets(
+  taskDbValues: unknown[][],
+  rulesValues: unknown[][] = [],
+): SheetsClient & {
   appended: unknown[][][];
   batchUpdates: ValueRange[][];
   deletedRows: Array<{ sheetId: number; rowIndex: number }>;
@@ -31,8 +34,8 @@ function mockSheets(values: unknown[][]): SheetsClient & {
     appended,
     batchUpdates,
     deletedRows,
-    async getValues() {
-      return values;
+    async getValues(_id, range) {
+      return range.startsWith('MeetingCategoryRules') ? rulesValues : taskDbValues;
     },
     async appendRows(_id, _range, rows) {
       appended.push(rows);
@@ -76,6 +79,7 @@ function baseEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     colorId: null,
     isAllDay: false,
     selfResponseStatus: null,
+    recurringEventId: null,
     ...overrides,
   };
 }
@@ -239,6 +243,47 @@ describe('syncMeetingsToSheet', () => {
         meetingCalendarId: 'me@example.com',
       }),
     ).resolves.toBeDefined();
+  });
+
+  it('applies an "all occurrences" category rule to a newly-synced occurrence', async () => {
+    const RULES_HEADER = ['RecurringEventID', 'Category', 'EffectiveFromDate'];
+    const sheets = mockSheets([HEADER], [RULES_HEADER, ['series-a', '案件A', '']]);
+    const calendar = mockCalendar([baseEvent({ id: 'evt-9', recurringEventId: 'series-a' })]);
+    const result = await syncMeetingsToSheet({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      meetingCalendarId: 'me@example.com',
+    });
+    expect(result.addedCount).toBe(1);
+    const [row] = sheets.appended[0]!;
+    expect(row![HEADER.indexOf(TASKDB_HEADERS.Category)]).toBe('案件A');
+  });
+
+  it('does not apply a "from this point on" rule to an occurrence before the effective date', async () => {
+    const RULES_HEADER = ['RecurringEventID', 'Category', 'EffectiveFromDate'];
+    const effectiveFrom = new Date('2026-07-09T00:00:00+09:00');
+    const sheets = mockSheets(
+      [HEADER],
+      [RULES_HEADER, ['series-a', '案件A', dateToSheetSerial(effectiveFrom)]],
+    );
+    const calendar = mockCalendar([
+      baseEvent({
+        id: 'evt-old',
+        recurringEventId: 'series-a',
+        start: new Date('2026-07-02T10:00:00+09:00'),
+        end: new Date('2026-07-02T10:30:00+09:00'),
+      }),
+    ]);
+    const result = await syncMeetingsToSheet({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      meetingCalendarId: 'me@example.com',
+    });
+    expect(result.addedCount).toBe(1);
+    const [row] = sheets.appended[0]!;
+    expect(row![HEADER.indexOf(TASKDB_HEADERS.Category)]).toBe('');
   });
 
   it('ignores ordinary (non-meeting) TaskDB rows entirely', async () => {

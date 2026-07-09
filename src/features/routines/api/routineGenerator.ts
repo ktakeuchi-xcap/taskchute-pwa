@@ -140,6 +140,7 @@ export async function generateNextWeekRoutines(
         status: TaskStatus.NotStarted,
         calendarEventId: event.id,
         source: null,
+        recurringEventId: null,
       };
       added.push(task);
       rowsToAppend.push(buildTaskRow(taskdbHeader, task));

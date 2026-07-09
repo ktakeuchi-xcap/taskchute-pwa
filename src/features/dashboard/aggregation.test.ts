@@ -22,6 +22,7 @@ function makeTask(overrides: Partial<Task>): Task {
     status: TaskStatus.NotStarted,
     calendarEventId: 'evt',
     source: null,
+    recurringEventId: null,
     ...overrides,
   };
 }

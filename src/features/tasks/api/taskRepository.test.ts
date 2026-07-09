@@ -22,6 +22,7 @@ const HEADER = [
 interface SheetState {
   TaskDB: unknown[][];
   Settings: unknown[][];
+  MeetingCategoryRules?: unknown[][];
 }
 
 function createMockSheets(state: SheetState): SheetsClient & {
@@ -41,6 +42,7 @@ function createMockSheets(state: SheetState): SheetsClient & {
     updateCalls,
     async getValues(_id, range) {
       if (range.startsWith('TaskDB')) return state.TaskDB;
+      if (range.startsWith('MeetingCategoryRules')) return state.MeetingCategoryRules ?? [];
       if (range === 'Settings!A:A') return state.Settings;
       if (range.startsWith('Settings')) {
         // honour "Settings!A2:A" by slicing the header row.
@@ -52,6 +54,8 @@ function createMockSheets(state: SheetState): SheetsClient & {
       appendCalls.push(rows);
       if (range.startsWith('Settings')) {
         state.Settings.push(...rows);
+      } else if (range.startsWith('MeetingCategoryRules')) {
+        state.MeetingCategoryRules = [...(state.MeetingCategoryRules ?? []), ...rows];
       } else {
         state.TaskDB.push(...rows);
       }
@@ -98,6 +102,7 @@ function createMockCalendar(): CalendarClient & {
         colorId: input.colorId ?? null,
         isAllDay: false,
         selfResponseStatus: null,
+        recurringEventId: null,
       };
       inserted.push(event);
       return event;
@@ -112,6 +117,7 @@ function createMockCalendar(): CalendarClient & {
         colorId: null,
         isAllDay: false,
         selfResponseStatus: null,
+        recurringEventId: null,
       };
     },
     async delete(_calId, eventId) {
@@ -622,6 +628,149 @@ describe('TaskRepository', () => {
         calendarId: 'cid',
       });
       await expect(repo.deleteTask('tid-m')).rejects.toThrowError(/cannot be deleted/);
+    });
+  });
+
+  describe('setMeetingCategory', () => {
+    const HEADER_WITH_MEETING_COLS = [...HEADER, 'Source', 'RecurringEventID'];
+
+    function seriesRow(taskId: string, start: Date, end: Date, eventId: string, seriesId: string) {
+      return [
+        taskId,
+        '定例会議',
+        '',
+        30,
+        dateToSheetSerial(start),
+        dateToSheetSerial(end),
+        '',
+        '',
+        'Not Started',
+        eventId,
+        'Meeting',
+        seriesId,
+      ];
+    }
+
+    function seriesSheets() {
+      return createMockSheets({
+        TaskDB: [
+          HEADER_WITH_MEETING_COLS,
+          seriesRow(
+            'tid-1',
+            new Date('2026-07-02T10:00:00+09:00'),
+            new Date('2026-07-02T10:30:00+09:00'),
+            'evt-1',
+            'series-a',
+          ),
+          seriesRow(
+            'tid-2',
+            new Date('2026-07-09T10:00:00+09:00'),
+            new Date('2026-07-09T10:30:00+09:00'),
+            'evt-2',
+            'series-a',
+          ),
+          seriesRow(
+            'tid-3',
+            new Date('2026-07-16T10:00:00+09:00'),
+            new Date('2026-07-16T10:30:00+09:00'),
+            'evt-3',
+            'series-a',
+          ),
+          seriesRow(
+            'tid-other',
+            new Date('2026-07-09T14:00:00+09:00'),
+            new Date('2026-07-09T14:30:00+09:00'),
+            'evt-other',
+            'series-b',
+          ),
+        ],
+        Settings: [],
+        MeetingCategoryRules: [['RecurringEventID', 'Category', 'EffectiveFromDate']],
+      });
+    }
+
+    it('scope "this" only updates the tagged occurrence', async () => {
+      const sheets = seriesSheets();
+      const repo = createTaskRepository({
+        sheets,
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+      const updated = await repo.setMeetingCategory('tid-2', '案件A', 'this');
+      expect(updated.category).toBe('案件A');
+      expect(sheets.batchUpdates).toHaveLength(1);
+      expect(sheets.batchUpdates[0]).toHaveLength(1);
+      expect(sheets.batchUpdates[0]![0]!.range).toMatch(/TaskDB!C3$/);
+      expect(sheets.appendCalls).toHaveLength(0);
+    });
+
+    it('scope "from-this" updates this and later occurrences in the same series, and persists a rule', async () => {
+      const sheets = seriesSheets();
+      const repo = createTaskRepository({
+        sheets,
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+      await repo.setMeetingCategory('tid-2', '案件A', 'from-this');
+      const updatedRanges = sheets.batchUpdates[0]!.map((u) => u.range);
+      // tid-2 (row 3) and tid-3 (row 4) updated; tid-1 (row 2, earlier) and
+      // tid-other (different series) must not be touched.
+      expect(updatedRanges).toContain('TaskDB!C3');
+      expect(updatedRanges).toContain('TaskDB!C4');
+      expect(updatedRanges).not.toContain('TaskDB!C2');
+      expect(updatedRanges).not.toContain('TaskDB!C5');
+      expect(sheets.appendCalls).toHaveLength(1);
+      const [ruleRow] = sheets.appendCalls[0]!;
+      expect(ruleRow).toEqual(['series-a', '案件A', expect.any(String)]);
+    });
+
+    it('scope "all" updates every occurrence in the series regardless of time', async () => {
+      const sheets = seriesSheets();
+      const repo = createTaskRepository({
+        sheets,
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+      await repo.setMeetingCategory('tid-2', '案件A', 'all');
+      const updatedRanges = sheets.batchUpdates[0]!.map((u) => u.range);
+      expect(updatedRanges).toContain('TaskDB!C2');
+      expect(updatedRanges).toContain('TaskDB!C3');
+      expect(updatedRanges).toContain('TaskDB!C4');
+      expect(updatedRanges).not.toContain('TaskDB!C5');
+      expect(sheets.appendCalls).toEqual([[['series-a', '案件A', '']]]);
+    });
+
+    it('rejects tagging a non-meeting task', async () => {
+      const sheets = createMockSheets({
+        TaskDB: [
+          HEADER,
+          [
+            'tid-manual',
+            'A',
+            '',
+            30,
+            dateToSheetSerial(new Date('2026-07-09T10:00:00+09:00')),
+            dateToSheetSerial(new Date('2026-07-09T10:30:00+09:00')),
+            '',
+            '',
+            'Not Started',
+            'evt-manual',
+          ],
+        ],
+        Settings: [],
+      });
+      const repo = createTaskRepository({
+        sheets,
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+      await expect(repo.setMeetingCategory('tid-manual', '案件A', 'this')).rejects.toThrowError(
+        /not a meeting task/,
+      );
     });
   });
 });

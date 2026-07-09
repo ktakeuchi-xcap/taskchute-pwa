@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { TaskRow } from './TaskRow';
 import { DraggableTaskRow } from './DraggableTaskRow';
 import { EditTaskForm } from './EditTaskForm';
+import { SetMeetingCategoryForm } from './SetMeetingCategoryForm';
 import { TaskSource, type Task } from '@/features/tasks/types';
 
 interface TaskListProps {
@@ -32,6 +33,7 @@ export function TaskList({
   draggable = false,
 }: TaskListProps) {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [taggingTaskId, setTaggingTaskId] = useState<string | null>(null);
 
   if (tasks.length === 0) {
     return (
@@ -50,6 +52,13 @@ export function TaskList({
             onCancel={() => setEditingTaskId(null)}
             onSaved={() => setEditingTaskId(null)}
           />
+        ) : taggingTaskId === task.taskId ? (
+          <SetMeetingCategoryForm
+            key={task.taskId}
+            task={task}
+            onCancel={() => setTaggingTaskId(null)}
+            onSaved={() => setTaggingTaskId(null)}
+          />
         ) : draggable && task.source !== TaskSource.Meeting ? (
           <DraggableTaskRow
             key={task.taskId}
@@ -67,6 +76,7 @@ export function TaskList({
             onDelete={onDelete}
             isDeleting={isDeleting}
             onEdit={() => setEditingTaskId(task.taskId)}
+            onTagCategory={() => setTaggingTaskId(task.taskId)}
           />
         ),
       )}

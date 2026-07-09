@@ -9,16 +9,22 @@ import { buildHeaderIndex, TASKDB_HEADERS } from './headers';
 const STATUS_VALUES: ReadonlySet<string> = new Set<TaskStatus>(Object.values(TaskStatusValues));
 
 // Looked up leniently (not via buildHeaderIndex/TASKDB_HEADERS) so existing
-// spreadsheets that haven't added a "Source" column yet keep working exactly
-// as before — tasks just read/write as ordinary (non-meeting) tasks.
+// spreadsheets that haven't added these columns yet keep working exactly as
+// before — tasks just read/write as ordinary (non-meeting) tasks.
 const SOURCE_HEADER = 'Source';
+const RECURRING_EVENT_ID_HEADER = 'RecurringEventID';
 
-function findSourceColumn(headerRow: unknown[]): number {
-  return headerRow.findIndex((cell) => cell === SOURCE_HEADER);
+function findColumn(headerRow: unknown[], header: string): number {
+  return headerRow.findIndex((cell) => cell === header);
 }
 
 function asSource(value: unknown): TaskSource | null {
   return value === TaskSourceValues.Meeting ? TaskSourceValues.Meeting : null;
+}
+
+function asNullableString(value: unknown): string | null {
+  const s = asString(value);
+  return s.length === 0 ? null : s;
 }
 
 function asString(value: unknown): string {
@@ -53,7 +59,8 @@ export function parseTaskDbRows(values: unknown[][]): TaskWithRow[] {
   const [headerRow, ...rows] = values;
   if (!headerRow) return [];
   const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
-  const sourceCol = findSourceColumn(headerRow);
+  const sourceCol = findColumn(headerRow, SOURCE_HEADER);
+  const recurringEventIdCol = findColumn(headerRow, RECURRING_EVENT_ID_HEADER);
 
   const tasks: TaskWithRow[] = [];
   rows.forEach((row, i) => {
@@ -79,6 +86,8 @@ export function parseTaskDbRows(values: unknown[][]): TaskWithRow[] {
         status: asStatus(row[idx.Status]),
         calendarEventId: asString(row[idx.CalendarEventID]),
         source: sourceCol === -1 ? null : asSource(row[sourceCol]),
+        recurringEventId:
+          recurringEventIdCol === -1 ? null : asNullableString(row[recurringEventIdCol]),
       },
     });
   });
@@ -91,7 +100,8 @@ export function parseTaskDbRows(values: unknown[][]): TaskWithRow[] {
  */
 export function buildTaskRow(headerRow: unknown[], task: Task): unknown[] {
   const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
-  const sourceCol = findSourceColumn(headerRow);
+  const sourceCol = findColumn(headerRow, SOURCE_HEADER);
+  const recurringEventIdCol = findColumn(headerRow, RECURRING_EVENT_ID_HEADER);
   const row = new Array<unknown>(headerRow.length).fill('');
   row[idx.TaskID] = task.taskId;
   row[idx.TaskName] = task.taskName;
@@ -103,9 +113,10 @@ export function buildTaskRow(headerRow: unknown[], task: Task): unknown[] {
   row[idx.ActualEndTime] = task.actualEndTime ? formatDateForSheet(task.actualEndTime) : '';
   row[idx.Status] = task.status;
   row[idx.CalendarEventID] = task.calendarEventId;
-  // If the sheet hasn't gotten a "Source" column yet, this is silently
-  // dropped — the row still writes correctly as an ordinary task.
+  // If the sheet hasn't gotten these columns yet, this is silently dropped —
+  // the row still writes correctly as an ordinary task.
   if (sourceCol !== -1) row[sourceCol] = task.source ?? '';
+  if (recurringEventIdCol !== -1) row[recurringEventIdCol] = task.recurringEventId ?? '';
   return row;
 }
 

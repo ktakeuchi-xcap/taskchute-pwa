@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { Task, TaskInput } from '@/features/tasks/types';
+import type { MeetingCategoryScope, Task, TaskInput } from '@/features/tasks/types';
 import { TaskStatus } from '@/features/tasks/types';
 import { useTaskRepository } from './useTaskRepository';
 import { TASKS_QUERY_KEY } from './useTasks';
@@ -112,6 +112,26 @@ export function useDeleteTask() {
       if (ctx?.previous) qc.setQueryData(TASKS_QUERY_KEY, ctx.previous);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: TASKS_QUERY_KEY }),
+  });
+}
+
+interface SetMeetingCategoryInput {
+  taskId: string;
+  category: string | null;
+  scope: MeetingCategoryScope;
+}
+
+export function useSetMeetingCategory() {
+  const repo = useTaskRepository();
+  const qc = useQueryClient();
+  return useMutation<Task, Error, SetMeetingCategoryInput>({
+    mutationFn: async ({ taskId, category, scope }) => {
+      if (!repo) throw new Error('repository unavailable');
+      return repo.setMeetingCategory(taskId, category, scope);
+    },
+    // A scope of "from-this"/"all" can touch other rows in the same series
+    // too, so there's no simple optimistic patch — just refetch.
+    onSuccess: () => qc.invalidateQueries({ queryKey: TASKS_QUERY_KEY }),
   });
 }
 

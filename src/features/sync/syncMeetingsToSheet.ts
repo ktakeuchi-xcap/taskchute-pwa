@@ -3,6 +3,7 @@ import type { CalendarClient, CalendarEvent } from '@/lib/google/calendar';
 import type { SheetsClient, ValueRange } from '@/lib/google/sheets';
 import { TASKDB_HEADERS, TASKDB_SHEET, buildHeaderIndex } from '@/features/tasks/api/headers';
 import { buildTaskRow, parseTaskDbRows } from '@/features/tasks/api/serializers';
+import { listMeetingCategoryRules } from '@/features/tasks/api/meetingCategoryRules';
 import { formatDateForSheet } from '@/lib/google/sheetDate';
 import { TaskSource, TaskStatus, type Task } from '@/features/tasks/types';
 
@@ -87,6 +88,8 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
   const meetingTasks = parseTaskDbRows(sheetValues).filter(
     (t) => t.task.source === TaskSource.Meeting,
   );
+  const rules = await listMeetingCategoryRules(sheets, spreadsheetId);
+  const ruleBySeriesId = new Map(rules.map((r) => [r.recurringEventId, r]));
 
   const byEventId = new Map(meetingTasks.map((t) => [t.task.calendarEventId, t]));
   const qualifyingEvents = events.filter((e) => !isDeclinedBySelf(e));
@@ -104,10 +107,17 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
     const estimateMinutes = estimateMinutesFor(event);
 
     if (!existing) {
+      const seriesId = event.recurringEventId ?? event.id;
+      const rule = ruleBySeriesId.get(seriesId);
+      const category =
+        rule &&
+        (!rule.effectiveFromDate || event.start.getTime() >= rule.effectiveFromDate.getTime())
+          ? rule.category
+          : null;
       const task: Task = {
         taskId: generateId(),
         taskName: event.summary,
-        category: null,
+        category,
         estimateMinutes,
         scheduledStartTime: event.start,
         scheduledEndTime: event.end,
@@ -116,6 +126,7 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
         status: TaskStatus.NotStarted,
         calendarEventId: event.id,
         source: TaskSource.Meeting,
+        recurringEventId: seriesId,
       };
       rowsToAppend.push(buildTaskRow(headerRow, task));
       continue;

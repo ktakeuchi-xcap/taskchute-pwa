@@ -2,6 +2,7 @@ import { CalendarColor, type CalendarClient } from '@/lib/google/calendar';
 import type { SheetsClient, ValueRange } from '@/lib/google/sheets';
 import { formatDateForSheet } from '@/lib/google/sheetDate';
 import {
+  MeetingCategoryScope,
   TaskSource,
   TaskStatus,
   type Task,
@@ -10,6 +11,7 @@ import {
 } from '@/features/tasks/types';
 import { deriveMeetingTaskStatus } from '@/features/tasks/meetingStatus';
 import { buildHeaderIndex, TASKDB_HEADERS, TASKDB_SHEET, SETTINGS_SHEET } from './headers';
+import { upsertMeetingCategoryRule } from './meetingCategoryRules';
 import { buildTaskRow, formatEventTitle, parseTaskDbRows, type TaskWithRow } from './serializers';
 
 export interface TaskRepository {
@@ -23,6 +25,11 @@ export interface TaskRepository {
   startTask(taskId: string): Promise<Task>;
   endTask(taskId: string): Promise<Task>;
   deleteTask(taskId: string): Promise<void>;
+  setMeetingCategory(
+    taskId: string,
+    category: string | null,
+    scope: MeetingCategoryScope,
+  ): Promise<Task>;
 }
 
 export interface TaskRepositoryDeps {
@@ -164,6 +171,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
         status: TaskStatus.NotStarted,
         calendarEventId: event.id,
         source: null,
+        recurringEventId: null,
       };
 
       await sheets.appendRows(spreadsheetId, TASKDB_SHEET, [buildTaskRow(headerRow, task)]);
@@ -304,6 +312,51 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
         await calendar.delete(calendarId, target.task.calendarEventId);
       }
       await sheets.deleteRow(spreadsheetId, taskDbSheet.sheetId, target.rowNumber - 1);
+    },
+
+    async setMeetingCategory(taskId, category, scope) {
+      const { headerRow, tasksWithRow } = await loadAll();
+      const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
+      const target = tasksWithRow.find((t) => t.task.taskId === taskId);
+      if (!target) throw new Error(`Task not found: ${taskId}`);
+      if (target.task.source !== TaskSource.Meeting) {
+        throw new Error(`Task "${target.task.taskName}" is not a meeting task`);
+      }
+
+      const updates: ValueRange[] = [
+        { range: cellAddress(target.rowNumber, idx.Category + 1), values: [[category ?? '']] },
+      ];
+
+      if (scope !== MeetingCategoryScope.This) {
+        const seriesId = target.task.recurringEventId;
+        if (!seriesId) {
+          throw new Error(`Meeting task "${target.task.taskName}" has no recurring series id`);
+        }
+        const others = tasksWithRow.filter(
+          (t) =>
+            t.rowNumber !== target.rowNumber &&
+            t.task.source === TaskSource.Meeting &&
+            t.task.recurringEventId === seriesId &&
+            (scope === MeetingCategoryScope.All ||
+              t.task.scheduledStartTime.getTime() >= target.task.scheduledStartTime.getTime()),
+        );
+        for (const other of others) {
+          updates.push({
+            range: cellAddress(other.rowNumber, idx.Category + 1),
+            values: [[category ?? '']],
+          });
+        }
+        await upsertMeetingCategoryRule(sheets, spreadsheetId, {
+          recurringEventId: seriesId,
+          category,
+          effectiveFromDate:
+            scope === MeetingCategoryScope.All ? null : target.task.scheduledStartTime,
+        });
+      }
+
+      await sheets.batchUpdateValues(spreadsheetId, updates);
+
+      return { ...target.task, category };
     },
   };
 }

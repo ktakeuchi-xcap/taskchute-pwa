@@ -137,6 +137,7 @@ describe('buildTaskRow', () => {
       status: TaskStatus.NotStarted,
       calendarEventId: 'evt-1',
       source: null,
+      recurringEventId: null,
     };
     const row = buildTaskRow(reordered, task);
     expect(row[reordered.indexOf(TASKDB_HEADERS.TaskID)]).toBe('tid-1');
@@ -162,6 +163,7 @@ describe('buildTaskRow', () => {
       status: TaskStatus.NotStarted,
       calendarEventId: 'evt-1',
       source: TaskSource.Meeting,
+      recurringEventId: 'series-1',
     };
     expect(() => buildTaskRow(HEADER, task)).not.toThrow();
 

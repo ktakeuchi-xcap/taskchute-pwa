@@ -20,6 +20,8 @@ export interface CalendarEvent {
   isAllDay: boolean;
   /** The signed-in user's own RSVP, or null if they're not listed as an attendee (e.g. a solo event). */
   selfResponseStatus: string | null;
+  /** Points to the master event's id for one instance of a recurring series; null for a standalone event. */
+  recurringEventId: string | null;
 }
 
 export interface CalendarEventInput {
@@ -50,6 +52,7 @@ interface ApiEvent {
   end: { dateTime?: string; date?: string };
   colorId?: string;
   attendees?: Array<{ self?: boolean; responseStatus?: string }>;
+  recurringEventId?: string;
 }
 
 function toEvent(raw: ApiEvent): CalendarEvent {
@@ -64,6 +67,7 @@ function toEvent(raw: ApiEvent): CalendarEvent {
     colorId: raw.colorId ?? null,
     isAllDay: raw.start.dateTime === undefined,
     selfResponseStatus: raw.attendees?.find((a) => a.self)?.responseStatus ?? null,
+    recurringEventId: raw.recurringEventId ?? null,
   };
 }
 

@@ -87,6 +87,7 @@ describe('syncCalendarToSheet', () => {
         colorId: null,
         isAllDay: false,
         selfResponseStatus: null,
+        recurringEventId: null,
       },
     ]);
     const result = await syncCalendarToSheet({
@@ -130,6 +131,7 @@ describe('syncCalendarToSheet', () => {
         colorId: null,
         isAllDay: false,
         selfResponseStatus: null,
+        recurringEventId: null,
       },
     ]);
     const result = await syncCalendarToSheet({
@@ -182,6 +184,7 @@ describe('syncCalendarToSheet', () => {
         colorId: null,
         isAllDay: false,
         selfResponseStatus: null,
+        recurringEventId: null,
       },
     ]);
     const result = await syncCalendarToSheet({
@@ -224,6 +227,7 @@ describe('syncCalendarToSheet', () => {
         colorId: null,
         isAllDay: false,
         selfResponseStatus: null,
+        recurringEventId: null,
       },
     ]);
     const result = await syncCalendarToSheet({

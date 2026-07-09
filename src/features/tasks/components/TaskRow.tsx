@@ -1,4 +1,4 @@
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Tag, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,8 @@ interface TaskRowProps {
   onDelete?: (taskId: string) => void;
   isDeleting?: boolean;
   onEdit?: () => void;
+  /** Meeting tasks can't be edited, but can still have a 案件 tag assigned. */
+  onTagCategory?: () => void;
 }
 
 const STATUS_DOT: Record<TaskStatus, string> = {
@@ -27,6 +29,7 @@ export function TaskRow({
   onDelete,
   isDeleting = false,
   onEdit,
+  onTagCategory,
 }: TaskRowProps) {
   const isDone = task.status === TaskStatus.Done;
   const isInProgress = task.status === TaskStatus.InProgress;
@@ -52,6 +55,20 @@ export function TaskRow({
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-violet-900">
           {task.taskName}
         </span>
+        {task.category ? (
+          <CategoryTag name={task.category} colorKey={categoryColorMap.get(task.category)} />
+        ) : null}
+        {onTagCategory ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 flex-shrink-0 text-violet-700 hover:text-violet-900"
+            aria-label="案件を設定"
+            onClick={onTagCategory}
+          >
+            <Tag className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
       </div>
     );
   }
@@ -96,6 +113,17 @@ export function TaskRow({
           <span className="text-[11px] text-muted-foreground">未着手</span>
         )}
       </div>
+      {onTagCategory && isMeeting ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-foreground"
+          aria-label="案件を設定"
+          onClick={onTagCategory}
+        >
+          <Tag className="h-4 w-4" />
+        </Button>
+      ) : null}
       {onEdit && !isMeeting ? (
         <Button
           variant="ghost"
