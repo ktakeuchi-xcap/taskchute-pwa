@@ -25,12 +25,10 @@ export function CurrentTaskCard({ task, onEnd, isPending }: CurrentTaskCardProps
   const startedAt = task.actualStartTime ?? task.scheduledStartTime;
   return (
     <Card className="border-amber-200 bg-amber-50 p-4">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        進行中
-      </div>
-      <div className="mt-1 flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-2">
         <div className="flex-1">
-          <h3 className="text-base font-semibold leading-tight">{task.taskName}</h3>
+          <Badge variant="progress">▶ IN PROGRESS</Badge>
+          <h3 className="mt-1.5 text-base font-semibold leading-tight">{task.taskName}</h3>
           <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
             {task.category ? (
               <CategoryTag name={task.category} colorKey={categoryColorMap.get(task.category)} />

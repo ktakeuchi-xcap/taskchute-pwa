@@ -43,6 +43,13 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: 'index.html',
+        // Without these, the generated SW only skips waiting when told to via
+        // postMessage — but our client code never sends that message while a
+        // tab is open (see registerServiceWorker.ts), so a new deploy would
+        // never actually take over until every tab was closed. This makes the
+        // new SW activate and claim open tabs immediately on its own.
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/(www|sheets|tasks)\.googleapis\.com\//,

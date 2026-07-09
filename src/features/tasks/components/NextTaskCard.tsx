@@ -25,14 +25,12 @@ export function NextTaskCard({ task, onStart, isPending, startDisabled }: NextTa
   }
   return (
     <Card className="border-blue-200 bg-blue-50 p-4">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        次のタスク
-      </div>
-      {task.category ? (
-        <div className="mt-1 flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="next">NEXT</Badge>
+        {task.category ? (
           <CategoryTag name={task.category} colorKey={categoryColorMap.get(task.category)} />
-        </div>
-      ) : null}
+        ) : null}
+      </div>
       <h3 className="mt-1.5 text-base font-semibold leading-tight">{task.taskName}</h3>
       <p className="mt-1 text-xs text-muted-foreground">
         予定: {formatJst(task.scheduledStartTime, 'M/d HH:mm')} ・ {task.estimateMinutes}分
