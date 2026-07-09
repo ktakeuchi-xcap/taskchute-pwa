@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useAuth } from '@/features/auth/useAuth';
 import { createSheetsClient } from '@/lib/google/sheets';
 import { createCalendarClient } from '@/lib/google/calendar';
@@ -37,45 +37,67 @@ export function useSync() {
     };
   }, [client]);
 
+  // useAutoSync fires this mutation from several independent triggers (mount,
+  // a 30s interval, tab-visibility changes) and the manual "同期" button can
+  // fire it too — with nothing else guarding against overlap, two runs firing
+  // close together would each read TaskDB before the other's writes landed,
+  // and then race to append/delete rows from that stale snapshot (duplicate
+  // meetings on insert, wrong rows removed on delete). Coalescing concurrent
+  // calls into the single in-flight run makes "at most one sync at a time"
+  // an actual invariant instead of a lucky timing coincidence.
+  const inFlightRef = useRef<Promise<SyncSummary> | null>(null);
+
   return useMutation<SyncSummary, Error, void>({
     mutationFn: async () => {
-      if (!deps) throw new Error('not authenticated');
-      // syncCalendarToSheet and syncMeetingsToSheet both mutate TaskDB by row
-      // number computed from their own snapshot of the sheet. Running them
-      // concurrently let one's row deletions shift positions out from under
-      // the other's stale row numbers, occasionally deleting the wrong rows
-      // (meeting tasks would vanish). They must run one at a time; the
-      // WaitingList sync touches a different sheet and stays parallel.
-      const [cal, wait] = await Promise.all([
-        syncCalendarToSheet({
-          sheets: deps.sheets,
-          calendar: deps.calendar,
-          spreadsheetId: deps.spreadsheetId,
-          calendarId: deps.calendarId,
-        }),
-        syncWaitingFromTasks({
-          sheets: deps.sheets,
-          tasks: deps.tasks,
-          spreadsheetId: deps.spreadsheetId,
-        }),
-      ]);
-      const meetings = deps.meetingCalendarId
-        ? await syncMeetingsToSheet({
+      if (inFlightRef.current) return inFlightRef.current;
+
+      const run = (async () => {
+        if (!deps) throw new Error('not authenticated');
+        // syncCalendarToSheet and syncMeetingsToSheet both mutate TaskDB by
+        // row number computed from their own snapshot of the sheet. Running
+        // them concurrently let one's row deletions shift positions out from
+        // under the other's stale row numbers, occasionally deleting the
+        // wrong rows (meeting tasks would vanish). They must run one at a
+        // time; the WaitingList sync touches a different sheet and stays
+        // parallel.
+        const [cal, wait] = await Promise.all([
+          syncCalendarToSheet({
             sheets: deps.sheets,
             calendar: deps.calendar,
             spreadsheetId: deps.spreadsheetId,
-            meetingCalendarId: deps.meetingCalendarId,
-          })
-        : { addedCount: 0, updatedCount: 0, deletedCount: 0 };
-      return {
-        tasksUpdated: cal.updatedCount,
-        tasksDeleted: cal.deletedCount,
-        meetingsAdded: meetings.addedCount,
-        meetingsUpdated: meetings.updatedCount,
-        meetingsDeleted: meetings.deletedCount,
-        waitingUpdated: wait.updatedCount,
-        waitingCleared: wait.clearedCount,
-      };
+            calendarId: deps.calendarId,
+          }),
+          syncWaitingFromTasks({
+            sheets: deps.sheets,
+            tasks: deps.tasks,
+            spreadsheetId: deps.spreadsheetId,
+          }),
+        ]);
+        const meetings = deps.meetingCalendarId
+          ? await syncMeetingsToSheet({
+              sheets: deps.sheets,
+              calendar: deps.calendar,
+              spreadsheetId: deps.spreadsheetId,
+              meetingCalendarId: deps.meetingCalendarId,
+            })
+          : { addedCount: 0, updatedCount: 0, deletedCount: 0 };
+        return {
+          tasksUpdated: cal.updatedCount,
+          tasksDeleted: cal.deletedCount,
+          meetingsAdded: meetings.addedCount,
+          meetingsUpdated: meetings.updatedCount,
+          meetingsDeleted: meetings.deletedCount,
+          waitingUpdated: wait.updatedCount,
+          waitingCleared: wait.clearedCount,
+        };
+      })();
+
+      inFlightRef.current = run;
+      try {
+        return await run;
+      } finally {
+        inFlightRef.current = null;
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: TASKS_QUERY_KEY });
