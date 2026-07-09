@@ -14,6 +14,15 @@ interface TaskListProps {
   draggable?: boolean;
 }
 
+function isAllDayMeeting(task: Task): boolean {
+  return task.source === TaskSource.Meeting && task.estimateMinutes === 0;
+}
+
+/** All-day meetings float to the top; everything else keeps its given order. */
+function sortForDisplay(tasks: Task[]): Task[] {
+  return [...tasks].sort((a, b) => Number(isAllDayMeeting(b)) - Number(isAllDayMeeting(a)));
+}
+
 export function TaskList({
   tasks,
   nextTaskId,
@@ -33,7 +42,7 @@ export function TaskList({
   }
   return (
     <div className="space-y-2">
-      {tasks.map((task) =>
+      {sortForDisplay(tasks).map((task) =>
         editingTaskId === task.taskId ? (
           <EditTaskForm
             key={task.taskId}

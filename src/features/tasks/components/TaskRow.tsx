@@ -31,6 +31,7 @@ export function TaskRow({
   const isDone = task.status === TaskStatus.Done;
   const isInProgress = task.status === TaskStatus.InProgress;
   const isMeeting = task.source === TaskSource.Meeting;
+  const isAllDay = isMeeting && task.estimateMinutes === 0;
   const categoryColorMap = useCategoryColorMap();
 
   const handleDelete = () => {
@@ -41,6 +42,19 @@ export function TaskRow({
       onDelete?.(task.taskId);
     }
   };
+
+  if (isAllDay) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-violet-200 bg-violet-50 px-3 py-1">
+        <span className="flex-shrink-0 rounded bg-violet-100 px-1 py-0.5 text-[10px] text-violet-700">
+          終日
+        </span>
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-violet-900">
+          {task.taskName}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -62,16 +76,10 @@ export function TaskRow({
               {' ・ '}
             </>
           ) : null}
-          {isMeeting && task.estimateMinutes === 0 ? (
-            '終日'
-          ) : (
-            <>
-              {formatJst(task.scheduledStartTime, 'HH:mm')} –{' '}
-              {formatJst(task.scheduledEndTime, 'HH:mm')}
-              {' ・ '}
-              {task.estimateMinutes}分
-            </>
-          )}
+          {formatJst(task.scheduledStartTime, 'HH:mm')} –{' '}
+          {formatJst(task.scheduledEndTime, 'HH:mm')}
+          {' ・ '}
+          {task.estimateMinutes}分
           {task.category ? (
             <>
               {' ・ '}

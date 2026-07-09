@@ -40,27 +40,33 @@ export function useSync() {
   return useMutation<SyncSummary, Error, void>({
     mutationFn: async () => {
       if (!deps) throw new Error('not authenticated');
-      const [cal, meetings, wait] = await Promise.all([
+      // syncCalendarToSheet and syncMeetingsToSheet both mutate TaskDB by row
+      // number computed from their own snapshot of the sheet. Running them
+      // concurrently let one's row deletions shift positions out from under
+      // the other's stale row numbers, occasionally deleting the wrong rows
+      // (meeting tasks would vanish). They must run one at a time; the
+      // WaitingList sync touches a different sheet and stays parallel.
+      const [cal, wait] = await Promise.all([
         syncCalendarToSheet({
           sheets: deps.sheets,
           calendar: deps.calendar,
           spreadsheetId: deps.spreadsheetId,
           calendarId: deps.calendarId,
         }),
-        deps.meetingCalendarId
-          ? syncMeetingsToSheet({
-              sheets: deps.sheets,
-              calendar: deps.calendar,
-              spreadsheetId: deps.spreadsheetId,
-              meetingCalendarId: deps.meetingCalendarId,
-            })
-          : Promise.resolve({ addedCount: 0, updatedCount: 0, deletedCount: 0 }),
         syncWaitingFromTasks({
           sheets: deps.sheets,
           tasks: deps.tasks,
           spreadsheetId: deps.spreadsheetId,
         }),
       ]);
+      const meetings = deps.meetingCalendarId
+        ? await syncMeetingsToSheet({
+            sheets: deps.sheets,
+            calendar: deps.calendar,
+            spreadsheetId: deps.spreadsheetId,
+            meetingCalendarId: deps.meetingCalendarId,
+          })
+        : { addedCount: 0, updatedCount: 0, deletedCount: 0 };
       return {
         tasksUpdated: cal.updatedCount,
         tasksDeleted: cal.deletedCount,
