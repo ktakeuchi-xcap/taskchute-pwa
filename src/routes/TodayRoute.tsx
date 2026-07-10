@@ -8,6 +8,7 @@ import { useGenerateRoutines } from '@/features/routines/hooks/useGenerateRoutin
 import { CurrentTaskCard } from '@/features/tasks/components/CurrentTaskCard';
 import { CurrentMeetingCard } from '@/features/tasks/components/CurrentMeetingCard';
 import { NextTaskCard } from '@/features/tasks/components/NextTaskCard';
+import { NextMeetingCard } from '@/features/tasks/components/NextMeetingCard';
 import { TaskList } from '@/features/tasks/components/TaskList';
 import { DailyWorkloadGauge } from '@/features/tasks/components/DailyWorkloadGauge';
 import { TaskSource, TaskStatus, type Task } from '@/features/tasks/types';
@@ -33,9 +34,13 @@ function partition(tasks: Task[]): {
   const currentMeeting =
     tasks.find((t) => t.source === TaskSource.Meeting && t.status === TaskStatus.InProgress) ??
     null;
+  // Unlike `current` above, "next up" merges tasks and meetings into one
+  // slot — whichever is chronologically first gets shown there (see
+  // NextMeetingCard for the meeting case, which has no start button since
+  // meetings begin themselves).
   const next =
-    todays.find((t) => t.source !== TaskSource.Meeting && t.status === TaskStatus.NotStarted) ??
-    manualTasks.find((t) => t.status === TaskStatus.NotStarted) ??
+    todays.find((t) => t.status === TaskStatus.NotStarted) ??
+    tasks.find((t) => t.status === TaskStatus.NotStarted) ??
     null;
   return { todays, activeTasks, doneTasks, current, currentMeeting, next };
 }
@@ -93,12 +98,16 @@ export function TodayRoute() {
             onEnd={() => current && endMutation.mutate(current.taskId)}
             isPending={endMutation.isPending}
           />
-          <NextTaskCard
-            task={next}
-            onStart={() => next && startMutation.mutate(next.taskId)}
-            isPending={startMutation.isPending}
-            startDisabled={current !== null}
-          />
+          {next && next.source === TaskSource.Meeting ? (
+            <NextMeetingCard task={next} />
+          ) : (
+            <NextTaskCard
+              task={next}
+              onStart={() => next && startMutation.mutate(next.taskId)}
+              isPending={startMutation.isPending}
+              startDisabled={current !== null}
+            />
+          )}
 
           <div className="pt-2">
             <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

@@ -67,10 +67,9 @@ export function DashboardRoute() {
   const current =
     tasks.find((t) => t.source !== TaskSource.Meeting && t.status === TaskStatus.InProgress) ??
     null;
-  const next =
-    todaysTasks.find(
-      (t) => t.source !== TaskSource.Meeting && t.status === TaskStatus.NotStarted,
-    ) ?? null;
+  // Merges tasks and meetings — matches TodayRoute's "next up" slot, which
+  // shows whichever is chronologically first regardless of source.
+  const next = todaysTasks.find((t) => t.status === TaskStatus.NotStarted) ?? null;
 
   const activeWaiting = (waitingQuery.data ?? []).filter((w) => !w.completed);
   const overdueWaitingCount = activeWaiting.filter(
@@ -128,7 +127,8 @@ export function DashboardRoute() {
             </>
           ) : next ? (
             <>
-              次のタスク：<span className="font-medium">{next.taskName}</span>
+              {next.source === TaskSource.Meeting ? '次の会議' : '次のタスク'}：
+              <span className="font-medium">{next.taskName}</span>
             </>
           ) : (
             '本日のタスクは以上です'
