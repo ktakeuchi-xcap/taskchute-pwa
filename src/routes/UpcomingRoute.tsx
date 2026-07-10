@@ -4,6 +4,7 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  pointerWithin,
   useDroppable,
   useSensor,
   useSensors,
@@ -165,7 +166,18 @@ export function UpcomingRoute() {
   };
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      // Default (rectIntersection) hit-tests the dragged element's own
+      // rectangle against each day button — since that rect can be offset
+      // from the cursor (drag started from a point inside a taller row),
+      // the day that actually highlights/receives the drop doesn't match
+      // where the mouse is. pointerWithin hit-tests the pointer coordinates
+      // themselves instead, matching what the user visually points at.
+      collisionDetection={pointerWithin}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
       <div className="space-y-3 p-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           予定
