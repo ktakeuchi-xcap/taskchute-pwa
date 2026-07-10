@@ -9,6 +9,7 @@ import { CurrentTaskCard } from '@/features/tasks/components/CurrentTaskCard';
 import { CurrentMeetingCard } from '@/features/tasks/components/CurrentMeetingCard';
 import { NextTaskCard } from '@/features/tasks/components/NextTaskCard';
 import { NextMeetingCard } from '@/features/tasks/components/NextMeetingCard';
+import { AllDoneCard } from '@/features/tasks/components/AllDoneCard';
 import { TaskList } from '@/features/tasks/components/TaskList';
 import { DailyWorkloadGauge } from '@/features/tasks/components/DailyWorkloadGauge';
 import { isAllDayMeeting } from '@/features/tasks/meetingStatus';
@@ -22,6 +23,7 @@ function partition(tasks: Task[]): {
   current: Task | null;
   currentMeeting: Task | null;
   next: Task | null;
+  allDoneToday: boolean;
 } {
   const todayKey = formatJst(new Date(), 'yyyy-MM-dd');
   const todays = tasks.filter((t) => formatJst(t.scheduledStartTime, 'yyyy-MM-dd') === todayKey);
@@ -35,17 +37,24 @@ function partition(tasks: Task[]): {
   const currentMeeting =
     tasks.find((t) => t.source === TaskSource.Meeting && t.status === TaskStatus.InProgress) ??
     null;
+  // Today counts as "all done" only once it had tasks and every one of them
+  // is finished — a day with nothing scheduled yet is a different state (see
+  // the emptyMessage branches below) and should still be able to peek ahead.
+  const allDoneToday = todays.length > 0 && activeTasks.length === 0;
   // Unlike `current` above, "next up" merges tasks and meetings into one
   // slot — whichever is chronologically first gets shown there (see
   // NextMeetingCard for the meeting case, which has no start button since
   // meetings begin themselves). All-day meetings have no real "next up"
   // moment (no start time to count down to) so they're excluded here, same
-  // as they're excluded from ever being "in progress".
-  const next =
-    todays.find((t) => t.status === TaskStatus.NotStarted && !isAllDayMeeting(t)) ??
-    tasks.find((t) => t.status === TaskStatus.NotStarted && !isAllDayMeeting(t)) ??
-    null;
-  return { todays, activeTasks, doneTasks, current, currentMeeting, next };
+  // as they're excluded from ever being "in progress". Once today is fully
+  // done, skip the cross-day fallback — peeking at tomorrow's task here
+  // undercuts the "you're done for today" moment (see AllDoneCard).
+  const next = allDoneToday
+    ? null
+    : (todays.find((t) => t.status === TaskStatus.NotStarted && !isAllDayMeeting(t)) ??
+      tasks.find((t) => t.status === TaskStatus.NotStarted && !isAllDayMeeting(t)) ??
+      null);
+  return { todays, activeTasks, doneTasks, current, currentMeeting, next, allDoneToday };
 }
 
 export function TodayRoute() {
@@ -56,7 +65,7 @@ export function TodayRoute() {
   const routinesMutation = useGenerateRoutines();
   const [routineFeedback, setRoutineFeedback] = useState<string | null>(null);
 
-  const { activeTasks, doneTasks, current, currentMeeting, next } = useMemo(
+  const { activeTasks, doneTasks, current, currentMeeting, next, allDoneToday } = useMemo(
     () => partition(tasksQuery.data ?? []),
     [tasksQuery.data],
   );
@@ -109,20 +118,26 @@ export function TodayRoute() {
 
           {currentMeeting ? <CurrentMeetingCard task={currentMeeting} /> : null}
 
-          <CurrentTaskCard
-            task={current}
-            onEnd={() => current && endMutation.mutate(current.taskId)}
-            isPending={endMutation.isPending}
-          />
-          {next && next.source === TaskSource.Meeting ? (
-            <NextMeetingCard task={next} />
+          {allDoneToday && !currentMeeting ? (
+            <AllDoneCard />
           ) : (
-            <NextTaskCard
-              task={next}
-              onStart={() => next && startMutation.mutate(next.taskId)}
-              isPending={startMutation.isPending}
-              startDisabled={current !== null}
-            />
+            <>
+              <CurrentTaskCard
+                task={current}
+                onEnd={() => current && endMutation.mutate(current.taskId)}
+                isPending={endMutation.isPending}
+              />
+              {next && next.source === TaskSource.Meeting ? (
+                <NextMeetingCard task={next} />
+              ) : (
+                <NextTaskCard
+                  task={next}
+                  onStart={() => next && startMutation.mutate(next.taskId)}
+                  isPending={startMutation.isPending}
+                  startDisabled={current !== null}
+                />
+              )}
+            </>
           )}
 
           <div className="pt-2">
