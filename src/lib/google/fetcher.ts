@@ -7,12 +7,40 @@ export interface GFetchOptions extends Omit<RequestInit, 'headers'> {
   json?: unknown;
 }
 
+// A 429 means Google's rate limiter rejected the request before it was ever
+// processed (unlike a 5xx, which can happen mid-processing) — Google's own
+// guidance is that it's always safe to retry a 429 with backoff, regardless
+// of HTTP method, since nothing was applied server-side yet. We don't extend
+// this to 5xx: a lost response to a non-idempotent write (append a row,
+// insert a calendar event, delete-by-row-index) could have actually landed,
+// and retrying blind could double-write or hit a since-shifted row.
+const RATE_LIMIT_STATUS = 429;
+const MAX_RATE_LIMIT_RETRIES = 4;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Prefer the server's own Retry-After hint when present; otherwise exponential backoff with jitter. */
+function retryDelayMs(response: Response, attempt: number): number {
+  const retryAfter = response.headers.get('Retry-After');
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds)) return seconds * 1000;
+    const at = Date.parse(retryAfter);
+    if (!Number.isNaN(at)) return Math.max(0, at - Date.now());
+  }
+  return 1000 * 2 ** attempt + Math.random() * 300;
+}
+
 /**
  * Wraps fetch with Google Bearer-token handling.
  * - Acquires the latest token from the AuthClient
  * - On 401, forces a silent renewal and retries once
+ * - On 429 (rate limited), retries with backoff up to MAX_RATE_LIMIT_RETRIES times
  * - Throws AuthRequiredError if renewal fails
- * - Throws GoogleApiError on other non-2xx responses
+ * - Throws GoogleApiError on other non-2xx responses (including a 429 that
+ *   still hasn't cleared after every retry)
  */
 export async function gfetch(
   client: AuthClient,
@@ -40,22 +68,27 @@ export async function gfetch(
   };
 
   let response: Response;
-  try {
-    response = await doRequest(false);
-  } catch (err) {
-    if (err instanceof AuthRequiredError) throw err;
-    throw new Error(`Network error calling ${url}`, { cause: err });
-  }
-
-  if (response.status === 401) {
+  for (let attempt = 0; ; attempt += 1) {
     try {
-      response = await doRequest(true);
+      response = await doRequest(false);
     } catch (err) {
-      throw new AuthRequiredError('Token refresh failed after 401', { cause: err });
+      if (err instanceof AuthRequiredError) throw err;
+      throw new Error(`Network error calling ${url}`, { cause: err });
     }
+
     if (response.status === 401) {
-      throw new AuthRequiredError('Still unauthenticated after refresh');
+      try {
+        response = await doRequest(true);
+      } catch (err) {
+        throw new AuthRequiredError('Token refresh failed after 401', { cause: err });
+      }
+      if (response.status === 401) {
+        throw new AuthRequiredError('Still unauthenticated after refresh');
+      }
     }
+
+    if (response.status !== RATE_LIMIT_STATUS || attempt >= MAX_RATE_LIMIT_RETRIES) break;
+    await sleep(retryDelayMs(response, attempt));
   }
 
   if (!response.ok) {

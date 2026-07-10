@@ -92,4 +92,72 @@ describe('gfetch', () => {
     const result = await gfetchJson<{ answer: number }>(client, 'https://api.example/foo');
     expect(result.answer).toBe(42);
   });
+
+  it('retries on 429 with backoff and succeeds once the rate limit clears', async () => {
+    vi.useFakeTimers();
+    try {
+      // Each retry calls ensureToken again (forceRefresh: false) — one token
+      // per attempt this test expects to make.
+      const client = fakeClient(['token', 'token', 'token']);
+      const fetchMock = vi.mocked(globalThis.fetch);
+      fetchMock
+        .mockResolvedValueOnce(new Response('', { status: 429 }))
+        .mockResolvedValueOnce(new Response('', { status: 429 }))
+        .mockResolvedValueOnce(new Response('{"ok":true}', { status: 200 }));
+
+      const promise = gfetch(client, 'https://api.example/foo');
+      await vi.advanceTimersByTimeAsync(20_000);
+      const res = await promise;
+
+      expect(res.status).toBe(200);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up after the max retries and surfaces GoogleApiError(429)', async () => {
+    vi.useFakeTimers();
+    try {
+      // 1 initial attempt + 4 retries = 5 ensureToken calls.
+      const client = fakeClient(['token', 'token', 'token', 'token', 'token']);
+      const fetchMock = vi.mocked(globalThis.fetch);
+      fetchMock.mockResolvedValue(
+        new Response('', { status: 429, statusText: 'Too Many Requests' }),
+      );
+
+      const promise = gfetch(client, 'https://api.example/foo').catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(60_000);
+      const err = await promise;
+
+      expect(err).toBeInstanceOf(GoogleApiError);
+      expect((err as GoogleApiError).status).toBe(429);
+      // 1 initial attempt + 4 retries.
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('honors a numeric Retry-After header instead of the default backoff', async () => {
+    vi.useFakeTimers();
+    try {
+      const client = fakeClient(['token', 'token']);
+      const fetchMock = vi.mocked(globalThis.fetch);
+      fetchMock
+        .mockResolvedValueOnce(new Response('', { status: 429, headers: { 'Retry-After': '5' } }))
+        .mockResolvedValueOnce(new Response('{"ok":true}', { status: 200 }));
+
+      const promise = gfetch(client, 'https://api.example/foo');
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(200);
+      const res = await promise;
+      expect(res.status).toBe(200);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
