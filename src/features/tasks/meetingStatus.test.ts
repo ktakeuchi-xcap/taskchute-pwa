@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveMeetingTaskStatus } from './meetingStatus';
+import { deriveMeetingTaskStatus, isAllDayMeeting } from './meetingStatus';
 import { TaskSource, TaskStatus, type Task } from './types';
 
 function makeMeetingTask(overrides: Partial<Task> = {}): Task {
@@ -55,5 +55,19 @@ describe('deriveMeetingTaskStatus', () => {
     expect(result.status).toBe(TaskStatus.Done);
     expect(result.actualStartTime).toEqual(task.scheduledStartTime);
     expect(result.actualEndTime).toEqual(task.scheduledEndTime);
+  });
+});
+
+describe('isAllDayMeeting', () => {
+  it('is true for a zero-duration meeting task', () => {
+    expect(isAllDayMeeting(makeMeetingTask({ estimateMinutes: 0 }))).toBe(true);
+  });
+
+  it('is false for a timed meeting task', () => {
+    expect(isAllDayMeeting(makeMeetingTask({ estimateMinutes: 30 }))).toBe(false);
+  });
+
+  it('is false for a zero-estimate non-meeting task', () => {
+    expect(isAllDayMeeting(makeMeetingTask({ source: null, estimateMinutes: 0 }))).toBe(false);
   });
 });

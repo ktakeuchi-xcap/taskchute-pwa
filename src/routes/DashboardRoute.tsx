@@ -8,6 +8,7 @@ import { useWaitingTasks } from '@/features/waiting/hooks/useWaitingTasks';
 import { useCategoryColorMap } from '@/features/tasks/hooks/useCategoryColorMap';
 import { categoryDotClassName } from '@/features/tasks/categoryColors';
 import { useUIStore } from '@/store/uiStore';
+import { isAllDayMeeting } from '@/features/tasks/meetingStatus';
 import { TaskSource, TaskStatus } from '@/features/tasks/types';
 import {
   aggregateDailyTotals,
@@ -68,8 +69,10 @@ export function DashboardRoute() {
     tasks.find((t) => t.source !== TaskSource.Meeting && t.status === TaskStatus.InProgress) ??
     null;
   // Merges tasks and meetings — matches TodayRoute's "next up" slot, which
-  // shows whichever is chronologically first regardless of source.
-  const next = todaysTasks.find((t) => t.status === TaskStatus.NotStarted) ?? null;
+  // shows whichever is chronologically first regardless of source. All-day
+  // meetings have no real "next up" moment, so they're excluded.
+  const next =
+    todaysTasks.find((t) => t.status === TaskStatus.NotStarted && !isAllDayMeeting(t)) ?? null;
 
   const activeWaiting = (waitingQuery.data ?? []).filter((w) => !w.completed);
   const overdueWaitingCount = activeWaiting.filter(

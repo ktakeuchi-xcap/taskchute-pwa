@@ -3,6 +3,7 @@ import { TaskRow } from './TaskRow';
 import { DraggableTaskRow } from './DraggableTaskRow';
 import { EditTaskForm } from './EditTaskForm';
 import { SetMeetingCategoryForm } from './SetMeetingCategoryForm';
+import { isAllDayMeeting } from '@/features/tasks/meetingStatus';
 import { TaskSource, type Task } from '@/features/tasks/types';
 
 interface TaskListProps {
@@ -13,10 +14,6 @@ interface TaskListProps {
   emptyMessage?: string;
   /** When true, each row can be dragged (e.g. onto a date in 予定's day strip). */
   draggable?: boolean;
-}
-
-function isAllDayMeeting(task: Task): boolean {
-  return task.source === TaskSource.Meeting && task.estimateMinutes === 0;
 }
 
 /** All-day meetings float to the top; everything else keeps its given order. */

@@ -1,5 +1,10 @@
 import { TaskSource, TaskStatus, type Task } from './types';
 
+/** All-day (zero-duration) meetings never get a real "next up"/in-progress moment — see deriveMeetingTaskStatus. */
+export function isAllDayMeeting(task: Task): boolean {
+  return task.source === TaskSource.Meeting && task.estimateMinutes === 0;
+}
+
 /**
  * Meeting tasks never get a manual start/end press, so their status is
  * derived live from the wall clock against the calendar's own scheduled

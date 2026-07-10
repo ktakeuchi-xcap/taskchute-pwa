@@ -11,6 +11,7 @@ import { NextTaskCard } from '@/features/tasks/components/NextTaskCard';
 import { NextMeetingCard } from '@/features/tasks/components/NextMeetingCard';
 import { TaskList } from '@/features/tasks/components/TaskList';
 import { DailyWorkloadGauge } from '@/features/tasks/components/DailyWorkloadGauge';
+import { isAllDayMeeting } from '@/features/tasks/meetingStatus';
 import { TaskSource, TaskStatus, type Task } from '@/features/tasks/types';
 import { formatJst } from '@/lib/time/jst';
 
@@ -37,10 +38,12 @@ function partition(tasks: Task[]): {
   // Unlike `current` above, "next up" merges tasks and meetings into one
   // slot — whichever is chronologically first gets shown there (see
   // NextMeetingCard for the meeting case, which has no start button since
-  // meetings begin themselves).
+  // meetings begin themselves). All-day meetings have no real "next up"
+  // moment (no start time to count down to) so they're excluded here, same
+  // as they're excluded from ever being "in progress".
   const next =
-    todays.find((t) => t.status === TaskStatus.NotStarted) ??
-    tasks.find((t) => t.status === TaskStatus.NotStarted) ??
+    todays.find((t) => t.status === TaskStatus.NotStarted && !isAllDayMeeting(t)) ??
+    tasks.find((t) => t.status === TaskStatus.NotStarted && !isAllDayMeeting(t)) ??
     null;
   return { todays, activeTasks, doneTasks, current, currentMeeting, next };
 }
