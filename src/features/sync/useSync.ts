@@ -4,6 +4,7 @@ import { useAuth } from '@/features/auth/useAuth';
 import { createSheetsClient } from '@/lib/google/sheets';
 import { createCalendarClient } from '@/lib/google/calendar';
 import { createTasksClient } from '@/lib/google/tasks';
+import { createTaskRepository } from '@/features/tasks/api/taskRepository';
 import { env } from '@/lib/env';
 import { syncCalendarToSheet } from './syncCalendarToSheet';
 import { syncMeetingsToSheet } from './syncMeetingsToSheet';
@@ -11,6 +12,8 @@ import { syncWaitingFromTasks } from './syncWaitingFromTasks';
 import { releaseSyncLock, tryAcquireSyncLock } from './syncLock';
 import { TASKS_QUERY_KEY } from '@/features/tasks/hooks/useTasks';
 import { WAITING_QUERY_KEY } from '@/features/waiting/hooks/useWaitingTasks';
+import { SYNC_MUTATION_KEY } from './syncMutationKey';
+import type { Task } from '@/features/tasks/types';
 
 export interface SyncSummary {
   tasksUpdated: number;
@@ -22,19 +25,36 @@ export interface SyncSummary {
   waitingCleared: number;
 }
 
+interface SyncMutationResult extends SyncSummary {
+  /**
+   * A fresh, authoritative read taken after every write this sync performed
+   * has settled — used to replace the tasks cache directly (see onSuccess)
+   * instead of merely invalidating it and letting some independently-timed
+   * refetch (the 30s poll, a window-focus refetch) race the tail end of our
+   * own writes. See useTasks.ts for why an ordinary read can transiently
+   * miss a row mid-write.
+   */
+  finalTasks: Task[];
+}
+
 export function useSync() {
   const { client } = useAuth();
   const qc = useQueryClient();
   const deps = useMemo(() => {
     if (!client) return null;
     if (!env.taskchuteSpreadsheetId || !env.taskchuteCalendarId) return null;
+    const sheets = createSheetsClient(client);
+    const calendar = createCalendarClient(client);
+    const spreadsheetId = env.taskchuteSpreadsheetId;
+    const calendarId = env.taskchuteCalendarId;
     return {
-      sheets: createSheetsClient(client),
-      calendar: createCalendarClient(client),
+      sheets,
+      calendar,
       tasks: createTasksClient(client),
-      spreadsheetId: env.taskchuteSpreadsheetId,
-      calendarId: env.taskchuteCalendarId,
+      spreadsheetId,
+      calendarId,
       meetingCalendarId: env.meetingCalendarId,
+      taskRepository: createTaskRepository({ sheets, calendar, spreadsheetId, calendarId }),
     };
   }, [client]);
 
@@ -46,15 +66,16 @@ export function useSync() {
   // meetings on insert, wrong rows removed on delete). Coalescing concurrent
   // calls into the single in-flight run makes "at most one sync at a time"
   // an actual invariant instead of a lucky timing coincidence.
-  const inFlightRef = useRef<Promise<SyncSummary> | null>(null);
+  const inFlightRef = useRef<Promise<SyncMutationResult> | null>(null);
 
-  return useMutation<SyncSummary, Error, void>({
+  return useMutation<SyncMutationResult, Error, void>({
+    mutationKey: SYNC_MUTATION_KEY,
     mutationFn: async () => {
       if (inFlightRef.current) return inFlightRef.current;
 
       const run = (async () => {
         if (!deps) throw new Error('not authenticated');
-        const empty: SyncSummary = {
+        const empty: SyncMutationResult = {
           tasksUpdated: 0,
           tasksDeleted: 0,
           meetingsAdded: 0,
@@ -62,6 +83,7 @@ export function useSync() {
           meetingsDeleted: 0,
           waitingUpdated: 0,
           waitingCleared: 0,
+          finalTasks: qc.getQueryData<Task[]>(TASKS_QUERY_KEY) ?? [],
         };
 
         // The in-flight guard above only coalesces calls within this one
@@ -101,6 +123,14 @@ export function useSync() {
                 meetingCalendarId: deps.meetingCalendarId,
               })
             : { addedCount: 0, updatedCount: 0, deletedCount: 0 };
+
+          // Taken after every write above has settled, still under the lock
+          // so no other device's sync can interleave a write before we
+          // capture it — this becomes the new cache value directly (see
+          // onSuccess), not just a trigger for yet another independently-
+          // timed read.
+          const finalTasks = await deps.taskRepository.listTasks();
+
           return {
             tasksUpdated: cal.updatedCount,
             tasksDeleted: cal.deletedCount,
@@ -109,6 +139,7 @@ export function useSync() {
             meetingsDeleted: meetings.deletedCount,
             waitingUpdated: wait.updatedCount,
             waitingCleared: wait.clearedCount,
+            finalTasks,
           };
         } finally {
           await releaseSyncLock(deps.sheets, deps.spreadsheetId).catch(() => {});
@@ -122,8 +153,8 @@ export function useSync() {
         inFlightRef.current = null;
       }
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: TASKS_QUERY_KEY });
+    onSuccess: (result) => {
+      qc.setQueryData(TASKS_QUERY_KEY, result.finalTasks);
       qc.invalidateQueries({ queryKey: WAITING_QUERY_KEY });
     },
   });

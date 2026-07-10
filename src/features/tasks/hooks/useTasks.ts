@@ -1,5 +1,6 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import { TaskSource, type Task } from '@/features/tasks/types';
+import { SYNC_MUTATION_KEY } from '@/features/sync/syncMutationKey';
 import { useTaskRepository } from './useTaskRepository';
 
 export const TASKS_QUERY_KEY = ['tasks'] as const;
@@ -55,6 +56,12 @@ const meetingMissStreaks = new Map<string, number>();
 export function useTasks() {
   const repo = useTaskRepository();
   const qc = useQueryClient();
+  // While a sync is running, its own ordinary reads could land mid-write
+  // (see reconcileMeetingFlicker above); that's a fallback, not the fix. The
+  // real fix is not to run a competing read at all during that window — the
+  // sync's own onSuccess (useSync.ts) sets the cache directly from its
+  // authoritative post-write read once everything has settled.
+  const isSyncing = useIsMutating({ mutationKey: SYNC_MUTATION_KEY }) > 0;
   return useQuery({
     queryKey: TASKS_QUERY_KEY,
     queryFn: async () => {
@@ -64,7 +71,8 @@ export function useTasks() {
       return reconcileMeetingFlicker(fresh, previous, meetingMissStreaks);
     },
     enabled: !!repo,
-    refetchInterval: 30_000,
+    refetchInterval: isSyncing ? false : 30_000,
+    refetchOnWindowFocus: !isSyncing,
     staleTime: 15_000,
   });
 }
