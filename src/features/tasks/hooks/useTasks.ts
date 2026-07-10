@@ -1,16 +1,67 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Task } from '@/features/tasks/types';
+import { TaskSource, type Task } from '@/features/tasks/types';
 import { useTaskRepository } from './useTaskRepository';
 
 export const TASKS_QUERY_KEY = ['tasks'] as const;
 
+/**
+ * A meeting task missing from a fresh fetch gets this many consecutive
+ * misses of grace before it's actually dropped from the displayed list.
+ *
+ * Meeting sync updates several rows' cells in a single batch request (see
+ * syncMeetingsToSheet.ts). A plain read landing mid-write can occasionally
+ * see a row's ScheduledStartTime/EndTime cells transiently blank, which
+ * fails parseTaskDbRows' date parsing and drops that row for one fetch —
+ * and since several meetings can be mid-write in the same batch at once,
+ * they can all vanish from the list together for a moment (ISS-16). A
+ * genuinely deleted/declined meeting keeps missing on every subsequent
+ * fetch and still disappears once the grace period is exhausted; a
+ * transient read artifact reappears on the very next 30s poll.
+ */
+export const MEETING_MISS_GRACE = 1;
+
+export function reconcileMeetingFlicker(
+  fresh: Task[],
+  previous: Task[] | undefined,
+  missStreaks: Map<string, number>,
+): Task[] {
+  if (!previous || previous.length === 0) return fresh;
+  const freshIds = new Set(fresh.map((t) => t.taskId));
+  const carried: Task[] = [];
+
+  for (const task of previous) {
+    if (task.source !== TaskSource.Meeting || freshIds.has(task.taskId)) continue;
+    const misses = (missStreaks.get(task.taskId) ?? 0) + 1;
+    if (misses <= MEETING_MISS_GRACE) {
+      missStreaks.set(task.taskId, misses);
+      carried.push(task);
+    } else {
+      missStreaks.delete(task.taskId);
+    }
+  }
+
+  for (const task of fresh) {
+    if (task.source === TaskSource.Meeting) missStreaks.delete(task.taskId);
+  }
+
+  if (carried.length === 0) return fresh;
+  return [...fresh, ...carried].sort(
+    (a, b) => a.scheduledStartTime.getTime() - b.scheduledStartTime.getTime(),
+  );
+}
+
+const meetingMissStreaks = new Map<string, number>();
+
 export function useTasks() {
   const repo = useTaskRepository();
+  const qc = useQueryClient();
   return useQuery({
     queryKey: TASKS_QUERY_KEY,
     queryFn: async () => {
       if (!repo) throw new Error('repository unavailable');
-      return repo.listTasks();
+      const fresh = await repo.listTasks();
+      const previous = qc.getQueryData<Task[]>(TASKS_QUERY_KEY);
+      return reconcileMeetingFlicker(fresh, previous, meetingMissStreaks);
     },
     enabled: !!repo,
     refetchInterval: 30_000,
