@@ -5,11 +5,12 @@ import { createSheetsClient } from '@/lib/google/sheets';
 import { createCalendarClient } from '@/lib/google/calendar';
 import { generateNextWeekRoutines } from '@/features/routines/api/routineGenerator';
 import { env } from '@/lib/env';
-import { TASKS_QUERY_KEY } from '@/features/tasks/hooks/useTasks';
+import { TASKS_QUERY_KEY, useIsSyncing } from '@/features/tasks/hooks/useTasks';
 
 export function useGenerateRoutines() {
   const { client } = useAuth();
   const qc = useQueryClient();
+  const isSyncing = useIsSyncing();
   const deps = useMemo(() => {
     if (!client) return null;
     if (!env.taskchuteSpreadsheetId || !env.taskchuteCalendarId) return null;
@@ -27,7 +28,9 @@ export function useGenerateRoutines() {
       return generateNextWeekRoutines(deps);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: TASKS_QUERY_KEY });
+      // See useTaskMutations.ts — skip the forced refetch while a sync is in
+      // flight; its own authoritative read will cover this once it settles.
+      if (!isSyncing) qc.invalidateQueries({ queryKey: TASKS_QUERY_KEY });
     },
   });
 }

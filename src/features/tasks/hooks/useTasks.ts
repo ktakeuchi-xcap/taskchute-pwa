@@ -53,6 +53,11 @@ export function reconcileMeetingFlicker(
 
 const meetingMissStreaks = new Map<string, number>();
 
+/** Whether a sync (useSync.ts) is currently in flight — see useIsSyncing below. */
+export function useIsSyncing(): boolean {
+  return useIsMutating({ mutationKey: SYNC_MUTATION_KEY }) > 0;
+}
+
 export function useTasks() {
   const repo = useTaskRepository();
   const qc = useQueryClient();
@@ -61,7 +66,7 @@ export function useTasks() {
   // real fix is not to run a competing read at all during that window — the
   // sync's own onSuccess (useSync.ts) sets the cache directly from its
   // authoritative post-write read once everything has settled.
-  const isSyncing = useIsMutating({ mutationKey: SYNC_MUTATION_KEY }) > 0;
+  const isSyncing = useIsSyncing();
   return useQuery({
     queryKey: TASKS_QUERY_KEY,
     queryFn: async () => {
