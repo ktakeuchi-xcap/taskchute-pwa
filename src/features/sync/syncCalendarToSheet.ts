@@ -8,6 +8,17 @@ import { TaskSource, TaskStatus } from '@/features/tasks/types';
 
 const SYNC_WINDOW_DAYS = 15;
 
+// A legitimate "the user deleted this on Calendar" batch is normally a
+// handful of rows at most. A count this large almost certainly means the
+// vanished-event detection itself is broken (exactly what happened in
+// ISS-24 — every meeting row looked "vanished" because it was being
+// checked against the wrong calendar's event list) rather than that the
+// user really removed this many events at once. Refusing to execute an
+// abnormally large delete — and surfacing it instead — trades a bit of
+// staleness for never mass-deleting real data again, regardless of the
+// specific bug that might trigger it next time.
+const MAX_SAFE_VANISHED_DELETE = 15;
+
 export interface SyncCalendarDeps {
   sheets: SheetsClient;
   calendar: CalendarClient;
@@ -19,6 +30,13 @@ export interface SyncCalendarDeps {
 export interface SyncCalendarResult {
   updatedCount: number;
   deletedCount: number;
+  /**
+   * >0 means the "vanished from Calendar" delete pass found more rows than
+   * MAX_SAFE_VANISHED_DELETE and skipped the deletion entirely rather than
+   * risk mass-deleting real data — see the constant's comment. Surfaced so
+   * this is visible instead of a silent no-op.
+   */
+  deletionsSkippedForSafety: number;
   windowStart: Date;
   windowEnd: Date;
 }
@@ -63,7 +81,13 @@ export async function syncCalendarToSheet(deps: SyncCalendarDeps): Promise<SyncC
     calendar.list(calendarId, windowStart, windowEnd),
   ]);
   if (sheetValues.length === 0) {
-    return { updatedCount: 0, deletedCount: 0, windowStart, windowEnd };
+    return {
+      updatedCount: 0,
+      deletedCount: 0,
+      deletionsSkippedForSafety: 0,
+      windowStart,
+      windowEnd,
+    };
   }
   const headerRow = sheetValues[0]!;
   const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
@@ -170,7 +194,10 @@ export async function syncCalendarToSheet(deps: SyncCalendarDeps): Promise<SyncC
     .map((t) => t.rowNumber);
 
   let deletedCount = 0;
-  if (rowsToDelete.length > 0) {
+  let deletionsSkippedForSafety = 0;
+  if (rowsToDelete.length > MAX_SAFE_VANISHED_DELETE) {
+    deletionsSkippedForSafety = rowsToDelete.length;
+  } else if (rowsToDelete.length > 0) {
     const sheetsMeta = await sheets.getSheetMetadata(spreadsheetId);
     const taskDbSheet = sheetsMeta.find((s) => s.title === TASKDB_SHEET);
     if (taskDbSheet) {
@@ -183,5 +210,5 @@ export async function syncCalendarToSheet(deps: SyncCalendarDeps): Promise<SyncC
     }
   }
 
-  return { updatedCount, deletedCount, windowStart, windowEnd };
+  return { updatedCount, deletedCount, deletionsSkippedForSafety, windowStart, windowEnd };
 }

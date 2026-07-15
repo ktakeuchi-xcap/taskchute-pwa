@@ -280,6 +280,38 @@ describe('syncCalendarToSheet', () => {
     expect(sheets.deletedRows).toEqual([{ sheetId: 42, rowIndex: 1 }]);
   });
 
+  it('refuses to delete when an abnormally large number of rows look vanished at once', async () => {
+    // 16 rows all "vanished" in one sync is exactly the shape ISS-24's bug
+    // produced (every meeting row looked vanished at once) — this must be
+    // treated as suspicious and skipped, not executed.
+    const start = new Date('2026-05-25T10:00:00+09:00');
+    const end = new Date('2026-05-25T10:30:00+09:00');
+    const rows = Array.from({ length: 16 }, (_, i) => [
+      `tid-${i}`,
+      `タスク${i}`,
+      '',
+      30,
+      dateToSheetSerial(start),
+      dateToSheetSerial(end),
+      '',
+      '',
+      'Not Started',
+      `evt-${i}`,
+    ]);
+    const sheets = mockSheets([HEADER, ...rows]);
+    const calendar = mockCalendar([]);
+    const result = await syncCalendarToSheet({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+      now: () => new Date('2026-05-25T08:00:00+09:00'),
+    });
+    expect(result.deletedCount).toBe(0);
+    expect(result.deletionsSkippedForSafety).toBe(16);
+    expect(sheets.deletedRows).toHaveLength(0);
+  });
+
   it('does not delete a row whose occurrence time is outside the sync window', async () => {
     // Scheduled 30 days from "now" — well outside the ±15d query window, so
     // its absence from `events` is expected and must not be treated as deletion.

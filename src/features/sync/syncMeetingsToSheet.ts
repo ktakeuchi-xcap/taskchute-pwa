@@ -10,6 +10,15 @@ import { TaskSource, TaskStatus, type Task } from '@/features/tasks/types';
 const SYNC_WINDOW_DAYS = 15;
 const SOURCE_HEADER = 'Source';
 
+// A legitimate "vanished from Calendar" batch (declined/cancelled meetings)
+// is normally a handful of rows. A count this large almost certainly means
+// the vanished-event detection itself is broken — see the same constant
+// and reasoning in syncCalendarToSheet.ts (ISS-24: an unrelated bug there
+// once made every meeting row look vanished). Refusing to execute an
+// abnormally large delete trades a bit of staleness for never mass-deleting
+// real data again, regardless of which bug might trigger it next.
+const MAX_SAFE_VANISHED_DELETE = 15;
+
 export interface SyncMeetingsDeps {
   sheets: SheetsClient;
   calendar: CalendarClient;
@@ -31,6 +40,12 @@ export interface SyncMeetingsResult {
    * inspect logs.
    */
   eventsFetched: number;
+  /**
+   * >0 means the "vanished from Calendar" delete pass found more rows than
+   * MAX_SAFE_VANISHED_DELETE and skipped the deletion entirely rather than
+   * risk mass-deleting real data — see the constant's comment.
+   */
+  deletionsSkippedForSafety: number;
 }
 
 function defaultGenerateId(): string {
@@ -111,12 +126,24 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
   ]);
   let sheetValues = sheetValuesInitial;
   if (sheetValues.length === 0) {
-    return { addedCount: 0, updatedCount: 0, deletedCount: 0, eventsFetched: events.length };
+    return {
+      addedCount: 0,
+      updatedCount: 0,
+      deletedCount: 0,
+      eventsFetched: events.length,
+      deletionsSkippedForSafety: 0,
+    };
   }
   let headerRow = sheetValues[0]!;
   const sourceCol = headerRow.findIndex((cell) => cell === SOURCE_HEADER);
   if (sourceCol === -1) {
-    return { addedCount: 0, updatedCount: 0, deletedCount: 0, eventsFetched: events.length };
+    return {
+      addedCount: 0,
+      updatedCount: 0,
+      deletedCount: 0,
+      eventsFetched: events.length,
+      deletionsSkippedForSafety: 0,
+    };
   }
   let meetingTasks = parseTaskDbRows(sheetValues).filter(
     (t) => t.task.source === TaskSource.Meeting,
@@ -248,7 +275,10 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
     .map((t) => t.rowNumber);
 
   let deletedCount = 0;
-  if (rowsToDelete.length > 0) {
+  let deletionsSkippedForSafety = 0;
+  if (rowsToDelete.length > MAX_SAFE_VANISHED_DELETE) {
+    deletionsSkippedForSafety = rowsToDelete.length;
+  } else if (rowsToDelete.length > 0) {
     const sheetsMeta = await sheets.getSheetMetadata(spreadsheetId);
     const taskDbSheet = sheetsMeta.find((s) => s.title === TASKDB_SHEET);
     if (taskDbSheet) {
@@ -266,5 +296,6 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
     updatedCount,
     deletedCount: deletedCount + dedupedCount,
     eventsFetched: events.length,
+    deletionsSkippedForSafety,
   };
 }

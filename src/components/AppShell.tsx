@@ -49,7 +49,15 @@ export function AppShell({ children }: AppShellProps) {
   const errorMessage = sync.isError
     ? `同期失敗: ${sync.error instanceof Error ? sync.error.message : sync.error}`
     : null;
-  const displayMessage = syncMessage ?? errorMessage;
+  // Persists (doesn't auto-clear like syncMessage) until a later sync
+  // completes without tripping the safety net again — this should be rare
+  // and always warrants a look, not a 3-second flash (see
+  // MAX_SAFE_VANISHED_DELETE in syncCalendarToSheet.ts/syncMeetingsToSheet.ts).
+  const safetyWarning =
+    sync.data && sync.data.deletionsSkippedForSafety > 0
+      ? `⚠️ 削除件数が異常に多かったため同期の削除処理をスキップしました（${sync.data.deletionsSkippedForSafety}件）。開発者に確認してください`
+      : null;
+  const displayMessage = safetyWarning ?? syncMessage ?? errorMessage;
 
   const runSync = async () => {
     setSyncMessage(null);
@@ -89,7 +97,14 @@ export function AppShell({ children }: AppShellProps) {
         </header>
 
         {displayMessage ? (
-          <div className="border-b border-border bg-muted/60 px-4 py-1.5 text-[11px] text-muted-foreground">
+          <div
+            className={cn(
+              'border-b px-4 py-1.5 text-[11px]',
+              safetyWarning
+                ? 'border-destructive/40 bg-destructive/10 font-medium text-destructive'
+                : 'border-border bg-muted/60 text-muted-foreground',
+            )}
+          >
             {displayMessage}
           </div>
         ) : null}

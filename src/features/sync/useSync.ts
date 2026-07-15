@@ -30,6 +30,15 @@ export interface SyncSummary {
   meetingEventsFetched: number;
   waitingUpdated: number;
   waitingCleared: number;
+  /**
+   * >0 means a "vanished from Calendar" delete pass (ordinary tasks and/or
+   * meetings) found a suspiciously large number of rows and skipped the
+   * deletion rather than risk mass-deleting real data — see
+   * MAX_SAFE_VANISHED_DELETE in syncCalendarToSheet.ts/syncMeetingsToSheet.ts.
+   * This should be rare; if it's ever non-zero, something upstream is
+   * misidentifying rows as deleted and needs investigating.
+   */
+  deletionsSkippedForSafety: number;
 }
 
 interface SyncMutationResult extends SyncSummary {
@@ -91,6 +100,7 @@ export function useSync() {
           meetingEventsFetched: 0,
           waitingUpdated: 0,
           waitingCleared: 0,
+          deletionsSkippedForSafety: 0,
           finalTasks: qc.getQueryData<Task[]>(TASKS_QUERY_KEY) ?? [],
         };
 
@@ -130,7 +140,13 @@ export function useSync() {
                 spreadsheetId: deps.spreadsheetId,
                 meetingCalendarId: deps.meetingCalendarId,
               })
-            : { addedCount: 0, updatedCount: 0, deletedCount: 0, eventsFetched: 0 };
+            : {
+                addedCount: 0,
+                updatedCount: 0,
+                deletedCount: 0,
+                eventsFetched: 0,
+                deletionsSkippedForSafety: 0,
+              };
 
           // Taken after every write above has settled, still under the lock
           // so no other device's sync can interleave a write before we
@@ -148,6 +164,8 @@ export function useSync() {
             meetingEventsFetched: meetings.eventsFetched,
             waitingUpdated: wait.updatedCount,
             waitingCleared: wait.clearedCount,
+            deletionsSkippedForSafety:
+              cal.deletionsSkippedForSafety + meetings.deletionsSkippedForSafety,
             finalTasks,
           };
         } finally {

@@ -120,6 +120,7 @@ describe('syncMeetingsToSheet', () => {
       updatedCount: 0,
       deletedCount: 0,
       eventsFetched: 1,
+      deletionsSkippedForSafety: 0,
     });
     expect(sheets.appended).toHaveLength(0);
   });
@@ -280,6 +281,41 @@ describe('syncMeetingsToSheet', () => {
       { sheetId: 42, rowIndex: 2 },
       { sheetId: 42, rowIndex: 1 },
     ]);
+  });
+
+  it('refuses to delete when an abnormally large number of meeting rows look vanished at once', async () => {
+    // This is exactly the shape of ISS-24's bug (an unrelated defect in
+    // syncCalendarToSheet.ts once made every meeting row look vanished at
+    // once) — treat it as suspicious and skip the deletion rather than
+    // execute it, regardless of which future bug might trigger it again.
+    const start = new Date('2026-07-09T10:00:00+09:00');
+    const end = new Date('2026-07-09T10:30:00+09:00');
+    const vanishedRow = (taskId: string, calendarEventId: string) => [
+      taskId,
+      '削除された会議',
+      '',
+      30,
+      dateToSheetSerial(start),
+      dateToSheetSerial(end),
+      '',
+      '',
+      'Not Started',
+      calendarEventId,
+      'Meeting',
+    ];
+    const rows = Array.from({ length: 16 }, (_, i) => vanishedRow(`tid-${i}`, `evt-${i}`));
+    const sheets = mockSheets([HEADER, ...rows]);
+    const calendar = mockCalendar([]);
+    const result = await syncMeetingsToSheet({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      meetingCalendarId: 'me@example.com',
+      now: () => new Date('2026-07-09T08:00:00+09:00'),
+    });
+    expect(result.deletedCount).toBe(0);
+    expect(result.deletionsSkippedForSafety).toBe(16);
+    expect(sheets.deletedRows).toHaveLength(0);
   });
 
   it('never calls patch or delete on the calendar client', async () => {
