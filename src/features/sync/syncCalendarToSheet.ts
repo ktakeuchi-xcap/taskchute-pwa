@@ -164,13 +164,12 @@ export async function syncCalendarToSheet(deps: SyncCalendarDeps): Promise<SyncC
     const sheetsMeta = await sheets.getSheetMetadata(spreadsheetId);
     const taskDbSheet = sheetsMeta.find((s) => s.title === TASKDB_SHEET);
     if (taskDbSheet) {
-      // Delete from the bottom up so earlier deletions don't shift the row
-      // numbers of rows still queued for deletion.
-      const sortedDesc = [...rowsToDelete].sort((a, b) => b - a);
-      for (const rowNumber of sortedDesc) {
-        await sheets.deleteRow(spreadsheetId, taskDbSheet.sheetId, rowNumber - 1);
-        deletedCount += 1;
-      }
+      await sheets.deleteRows(
+        spreadsheetId,
+        taskDbSheet.sheetId,
+        rowsToDelete.map((rowNumber) => rowNumber - 1),
+      );
+      deletedCount = rowsToDelete.length;
     }
   }
 

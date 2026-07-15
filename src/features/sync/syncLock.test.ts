@@ -18,6 +18,7 @@ function mockSheets(initialCell: unknown = ''): SheetsClient & { updateCalls: un
     },
     async batchUpdateValues() {},
     async deleteRow() {},
+    async deleteRows() {},
     async getSheetMetadata() {
       return [];
     },

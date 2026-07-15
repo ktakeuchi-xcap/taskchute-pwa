@@ -29,6 +29,7 @@ function mockSheets(values: unknown[][]): SheetsClient & {
       batchUpdates.push(data);
     },
     async deleteRow() {},
+    async deleteRows() {},
     async getSheetMetadata() {
       return [];
     },

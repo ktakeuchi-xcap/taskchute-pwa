@@ -38,6 +38,11 @@ function mockSheets(values: unknown[][]): SheetsClient & {
     async deleteRow(_id, sheetId, rowIndex) {
       deletedRows.push({ sheetId, rowIndex });
     },
+    async deleteRows(_id, sheetId, rowIndexes) {
+      for (const rowIndex of [...rowIndexes].sort((a, b) => b - a)) {
+        deletedRows.push({ sheetId, rowIndex });
+      }
+    },
     async getSheetMetadata() {
       return [{ sheetId: 42, title: 'TaskDB' }];
     },

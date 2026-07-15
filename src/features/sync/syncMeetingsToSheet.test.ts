@@ -26,6 +26,7 @@ function mockSheets(
   appended: unknown[][][];
   batchUpdates: ValueRange[][];
   deletedRows: Array<{ sheetId: number; rowIndex: number }>;
+  deleteCallCount: number;
 } {
   // A live, mutating copy — deleteRow/appendRows must be reflected in the
   // next getValues call for the dedup pre-pass's "delete then re-read" flow
@@ -34,10 +35,14 @@ function mockSheets(
   const appended: unknown[][][] = [];
   const batchUpdates: ValueRange[][] = [];
   const deletedRows: Array<{ sheetId: number; rowIndex: number }> = [];
+  const state = { deleteCallCount: 0 };
   return {
     appended,
     batchUpdates,
     deletedRows,
+    get deleteCallCount() {
+      return state.deleteCallCount;
+    },
     async getValues(_id, range) {
       return range.startsWith('MeetingCategoryRules') ? rulesValues : taskDbValues;
     },
@@ -50,8 +55,17 @@ function mockSheets(
       batchUpdates.push(data);
     },
     async deleteRow(_id, sheetId, rowIndex) {
+      state.deleteCallCount += 1;
       deletedRows.push({ sheetId, rowIndex });
       taskDbValues = taskDbValues.filter((_, i) => i !== rowIndex);
+    },
+    async deleteRows(_id, sheetId, rowIndexes) {
+      state.deleteCallCount += 1;
+      for (const rowIndex of [...rowIndexes].sort((a, b) => b - a)) {
+        deletedRows.push({ sheetId, rowIndex });
+      }
+      const toRemove = new Set(rowIndexes);
+      taskDbValues = taskDbValues.filter((_, i) => !toRemove.has(i));
     },
     async getSheetMetadata() {
       return [{ sheetId: 42, title: 'TaskDB' }];
@@ -221,6 +235,45 @@ describe('syncMeetingsToSheet', () => {
     });
     expect(result.deletedCount).toBe(1);
     expect(sheets.deletedRows).toEqual([{ sheetId: 42, rowIndex: 1 }]);
+  });
+
+  it('removes several vanished meeting rows in a single batched call, not one per row', async () => {
+    const start = new Date('2026-07-09T10:00:00+09:00');
+    const end = new Date('2026-07-09T10:30:00+09:00');
+    const vanishedRow = (taskId: string, calendarEventId: string) => [
+      taskId,
+      '削除された会議',
+      '',
+      30,
+      dateToSheetSerial(start),
+      dateToSheetSerial(end),
+      '',
+      '',
+      'Not Started',
+      calendarEventId,
+      'Meeting',
+    ];
+    const sheets = mockSheets([
+      HEADER,
+      vanishedRow('tid-a', 'evt-a'),
+      vanishedRow('tid-b', 'evt-b'),
+      vanishedRow('tid-c', 'evt-c'),
+    ]);
+    const calendar = mockCalendar([]);
+    const result = await syncMeetingsToSheet({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      meetingCalendarId: 'me@example.com',
+      now: () => new Date('2026-07-09T08:00:00+09:00'),
+    });
+    expect(result.deletedCount).toBe(3);
+    expect(sheets.deleteCallCount).toBe(1);
+    expect(sheets.deletedRows).toEqual([
+      { sheetId: 42, rowIndex: 3 },
+      { sheetId: 42, rowIndex: 2 },
+      { sheetId: 42, rowIndex: 1 },
+    ]);
   });
 
   it('never calls patch or delete on the calendar client', async () => {

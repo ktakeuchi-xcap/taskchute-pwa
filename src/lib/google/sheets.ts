@@ -25,6 +25,13 @@ export interface SheetsClient {
   batchUpdateValues(spreadsheetId: string, data: ValueRange[]): Promise<void>;
   /** Delete a single row by 0-based row index. Needs the numeric sheet ID. */
   deleteRow(spreadsheetId: string, sheetId: number, rowIndex: number): Promise<void>;
+  /**
+   * Delete several rows in one API call instead of one round trip per row.
+   * Order doesn't matter — internally sorted descending so each deletion in
+   * the same batchUpdate request doesn't shift the row indices still queued
+   * behind it (Google applies a batch's requests in array order).
+   */
+  deleteRows(spreadsheetId: string, sheetId: number, rowIndexes: number[]): Promise<void>;
   /** Resolve numeric sheet IDs by name. */
   getSheetMetadata(spreadsheetId: string): Promise<SheetMetadata[]>;
 }
@@ -85,6 +92,27 @@ export function createSheetsClient(auth: AuthClient): SheetsClient {
               },
             },
           ],
+        },
+      });
+    },
+
+    async deleteRows(spreadsheetId, sheetId, rowIndexes) {
+      if (rowIndexes.length === 0) return;
+      const url = `${BASE}/${spreadsheetId}:batchUpdate`;
+      const sortedDesc = [...rowIndexes].sort((a, b) => b - a);
+      await gfetch(auth, url, {
+        method: 'POST',
+        json: {
+          requests: sortedDesc.map((rowIndex) => ({
+            deleteDimension: {
+              range: {
+                sheetId,
+                dimension: 'ROWS',
+                startIndex: rowIndex,
+                endIndex: rowIndex + 1,
+              },
+            },
+          })),
         },
       });
     },

@@ -41,6 +41,7 @@ function createSheets(state: SheetState): SheetsClient & {
     async updateRange() {},
     async batchUpdateValues() {},
     async deleteRow() {},
+    async deleteRows() {},
     async getSheetMetadata() {
       return [];
     },

@@ -30,6 +30,7 @@ function mockSheets(values: unknown[][] | (() => never)): SheetsClient & {
     },
     async batchUpdateValues() {},
     async deleteRow() {},
+    async deleteRows() {},
     async getSheetMetadata() {
       return [{ sheetId: 1, title: MEETING_CATEGORY_RULES_SHEET }];
     },

@@ -120,10 +120,12 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
     const sheetsMeta = await sheets.getSheetMetadata(spreadsheetId);
     const taskDbSheet = sheetsMeta.find((s) => s.title === TASKDB_SHEET);
     if (taskDbSheet) {
-      for (const rowNumber of [...duplicateRows].sort((a, b) => b - a)) {
-        await sheets.deleteRow(spreadsheetId, taskDbSheet.sheetId, rowNumber - 1);
-        dedupedCount += 1;
-      }
+      await sheets.deleteRows(
+        spreadsheetId,
+        taskDbSheet.sheetId,
+        duplicateRows.map((rowNumber) => rowNumber - 1),
+      );
+      dedupedCount = duplicateRows.length;
       // Row numbers shifted after deleting — re-read before doing anything
       // else so the rest of this function isn't working from stale numbers.
       sheetValues = await sheets.getValues(spreadsheetId, TASKDB_SHEET);
@@ -230,11 +232,12 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
     const sheetsMeta = await sheets.getSheetMetadata(spreadsheetId);
     const taskDbSheet = sheetsMeta.find((s) => s.title === TASKDB_SHEET);
     if (taskDbSheet) {
-      const sortedDesc = [...rowsToDelete].sort((a, b) => b - a);
-      for (const rowNumber of sortedDesc) {
-        await sheets.deleteRow(spreadsheetId, taskDbSheet.sheetId, rowNumber - 1);
-        deletedCount += 1;
-      }
+      await sheets.deleteRows(
+        spreadsheetId,
+        taskDbSheet.sheetId,
+        rowsToDelete.map((rowNumber) => rowNumber - 1),
+      );
+      deletedCount = rowsToDelete.length;
     }
   }
 
