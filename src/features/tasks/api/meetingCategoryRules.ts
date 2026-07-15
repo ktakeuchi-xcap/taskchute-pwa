@@ -62,6 +62,39 @@ function cellAddress(rowNumber: number, col0Based: number): string {
   return `${MEETING_CATEGORY_RULES_SHEET}!${columnLetter(col0Based + 1)}${rowNumber}`;
 }
 
+function parseCategoryRulesFromValues(values: unknown[][]): MeetingCategoryRule[] {
+  if (values.length === 0) return [];
+  const idx = buildHeaderIndex(values[0]!, MEETING_CATEGORY_RULES_HEADERS);
+  return values
+    .slice(1)
+    .map((row) => ({
+      recurringEventId: asString(row[idx.RecurringEventID]),
+      category: (() => {
+        const c = asString(row[idx.Category]);
+        return c.length === 0 ? null : c;
+      })(),
+      effectiveFromDate: parseSheetDateCell(row[idx.EffectiveFromDate]),
+    }))
+    .filter((r) => r.recurringEventId.length > 0);
+}
+
+function parseWorkloadRulesFromValues(values: unknown[][]): MeetingWorkloadRule[] {
+  if (values.length === 0) return [];
+  const headerRow = values[0]!;
+  const idx = buildHeaderIndex(headerRow, MEETING_CATEGORY_RULES_HEADERS);
+  const countsCol = findColumn(headerRow, COUNTS_TOWARD_WORKLOAD_HEADER);
+  if (countsCol === -1) return [];
+  const effCol = findColumn(headerRow, WORKLOAD_EFFECTIVE_FROM_HEADER);
+  return values
+    .slice(1)
+    .map((row) => ({
+      recurringEventId: asString(row[idx.RecurringEventID]),
+      countsTowardWorkload: asString(row[countsCol]) !== 'FALSE',
+      effectiveFromDate: effCol === -1 ? null : parseSheetDateCell(row[effCol]),
+    }))
+    .filter((r) => r.recurringEventId.length > 0);
+}
+
 /**
  * Rules created by tagging a meeting with "これ以降のすべての予定"/"すべての予定"
  * (see setMeetingCategory in taskRepository.ts) — consulted by
@@ -78,19 +111,7 @@ export async function listMeetingCategoryRules(
   // must degrade the same way a missing sheet does, not crash the sync.
   try {
     const values = await sheets.getValues(spreadsheetId, MEETING_CATEGORY_RULES_SHEET);
-    if (values.length === 0) return [];
-    const idx = buildHeaderIndex(values[0]!, MEETING_CATEGORY_RULES_HEADERS);
-    return values
-      .slice(1)
-      .map((row) => ({
-        recurringEventId: asString(row[idx.RecurringEventID]),
-        category: (() => {
-          const c = asString(row[idx.Category]);
-          return c.length === 0 ? null : c;
-        })(),
-        effectiveFromDate: parseSheetDateCell(row[idx.EffectiveFromDate]),
-      }))
-      .filter((r) => r.recurringEventId.length > 0);
+    return parseCategoryRulesFromValues(values);
   } catch {
     return [];
   }
@@ -156,22 +177,30 @@ export async function listMeetingWorkloadRules(
 ): Promise<MeetingWorkloadRule[]> {
   try {
     const values = await sheets.getValues(spreadsheetId, MEETING_CATEGORY_RULES_SHEET);
-    if (values.length === 0) return [];
-    const headerRow = values[0]!;
-    const idx = buildHeaderIndex(headerRow, MEETING_CATEGORY_RULES_HEADERS);
-    const countsCol = findColumn(headerRow, COUNTS_TOWARD_WORKLOAD_HEADER);
-    if (countsCol === -1) return [];
-    const effCol = findColumn(headerRow, WORKLOAD_EFFECTIVE_FROM_HEADER);
-    return values
-      .slice(1)
-      .map((row) => ({
-        recurringEventId: asString(row[idx.RecurringEventID]),
-        countsTowardWorkload: asString(row[countsCol]) !== 'FALSE',
-        effectiveFromDate: effCol === -1 ? null : parseSheetDateCell(row[effCol]),
-      }))
-      .filter((r) => r.recurringEventId.length > 0);
+    return parseWorkloadRulesFromValues(values);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Combines listMeetingCategoryRules and listMeetingWorkloadRules into a
+ * single read of the MeetingCategoryRules sheet — both used to fetch it
+ * independently, doubling this call on every meeting sync for no reason
+ * (and doubling the odds of a stray 429 along the way).
+ */
+export async function listMeetingRules(
+  sheets: SheetsClient,
+  spreadsheetId: string,
+): Promise<{ category: MeetingCategoryRule[]; workload: MeetingWorkloadRule[] }> {
+  try {
+    const values = await sheets.getValues(spreadsheetId, MEETING_CATEGORY_RULES_SHEET);
+    return {
+      category: parseCategoryRulesFromValues(values),
+      workload: parseWorkloadRulesFromValues(values),
+    };
+  } catch {
+    return { category: [], workload: [] };
   }
 }
 

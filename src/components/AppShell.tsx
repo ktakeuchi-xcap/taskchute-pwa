@@ -4,6 +4,18 @@ import { cn } from '@/lib/utils';
 import { useUIStore, type Tab } from '@/store/uiStore';
 import { formatJst, WEEKDAY_JA } from '@/lib/time/jst';
 import { useAutoSync } from '@/features/sync/useAutoSync';
+import type { SyncSummary } from '@/features/sync/useSync';
+
+function formatSyncSuccess(result: SyncSummary): string {
+  return (
+    `同期完了: タスク ${result.tasksUpdated} 件更新 / 確認待ち ${result.waitingUpdated} 件更新` +
+    (result.tasksDeleted > 0 ? ` / タスク ${result.tasksDeleted} 件削除` : '') +
+    (result.waitingCleared > 0 ? ` / 確認待ち ${result.waitingCleared} 件削除` : '') +
+    (result.meetingsAdded > 0 ? ` / 会議 ${result.meetingsAdded} 件追加` : '') +
+    (result.meetingsUpdated > 0 ? ` / 会議 ${result.meetingsUpdated} 件更新` : '') +
+    (result.meetingsDeleted > 0 ? ` / 会議 ${result.meetingsDeleted} 件削除` : '')
+  );
+}
 
 const TABS: ReadonlyArray<{ id: Tab; label: string; Icon: typeof Calendar }> = [
   { id: 'today', label: '今日', Icon: Calendar },
@@ -26,21 +38,26 @@ export function AppShell({ children }: AppShellProps) {
   const today = new Date();
   const dateLabel = `${formatJst(today, 'yyyy年M月d日')}（${WEEKDAY_JA[today.getDay()]}）`;
 
+  // The 30s auto-sync loop (useAutoSync) triggers via a bare `.mutate()` with
+  // no local try/catch anywhere, so a background failure used to be entirely
+  // silent — the user would only ever see "同期失敗" if they happened to
+  // press the button at the exact moment it failed. Deriving the banner from
+  // the shared mutation's own error state (rather than only setting it from
+  // this component's own try/catch below) surfaces a failure regardless of
+  // which trigger — button or background timer — caused it.
+  const errorMessage = sync.isError
+    ? `同期失敗: ${sync.error instanceof Error ? sync.error.message : sync.error}`
+    : null;
+  const displayMessage = syncMessage ?? errorMessage;
+
   const runSync = async () => {
     setSyncMessage(null);
     try {
       const result = await sync.mutateAsync();
-      setSyncMessage(
-        `同期完了: タスク ${result.tasksUpdated} 件更新 / 確認待ち ${result.waitingUpdated} 件更新` +
-          (result.tasksDeleted > 0 ? ` / タスク ${result.tasksDeleted} 件削除` : '') +
-          (result.waitingCleared > 0 ? ` / 確認待ち ${result.waitingCleared} 件削除` : '') +
-          (result.meetingsAdded > 0 ? ` / 会議 ${result.meetingsAdded} 件追加` : '') +
-          (result.meetingsUpdated > 0 ? ` / 会議 ${result.meetingsUpdated} 件更新` : '') +
-          (result.meetingsDeleted > 0 ? ` / 会議 ${result.meetingsDeleted} 件削除` : ''),
-      );
+      setSyncMessage(formatSyncSuccess(result));
       setTimeout(() => setSyncMessage(null), 3000);
-    } catch (err) {
-      setSyncMessage(`同期失敗: ${err instanceof Error ? err.message : err}`);
+    } catch {
+      // Surfaced via errorMessage above instead.
     }
   };
 
@@ -70,9 +87,9 @@ export function AppShell({ children }: AppShellProps) {
           </button>
         </header>
 
-        {syncMessage ? (
+        {displayMessage ? (
           <div className="border-b border-border bg-muted/60 px-4 py-1.5 text-[11px] text-muted-foreground">
-            {syncMessage}
+            {displayMessage}
           </div>
         ) : null}
 

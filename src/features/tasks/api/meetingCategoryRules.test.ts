@@ -5,6 +5,7 @@ import {
   upsertMeetingCategoryRule,
   listMeetingWorkloadRules,
   upsertMeetingWorkloadRule,
+  listMeetingRules,
 } from './meetingCategoryRules';
 import type { SheetsClient, ValueRange } from '@/lib/google/sheets';
 import { dateToSheetSerial } from '@/lib/google/sheetDate';
@@ -16,15 +17,21 @@ function mockSheets(values: unknown[][] | (() => never)): SheetsClient & {
   updateCalls: Array<{ range: string; values: unknown[][] }>;
   appended: unknown[][][];
   batchUpdates: ValueRange[][];
+  getValuesCallCount: number;
 } {
   const updateCalls: Array<{ range: string; values: unknown[][] }> = [];
   const appended: unknown[][][] = [];
   const batchUpdates: ValueRange[][] = [];
+  const state = { getValuesCallCount: 0 };
   return {
     updateCalls,
     appended,
     batchUpdates,
+    get getValuesCallCount() {
+      return state.getValuesCallCount;
+    },
     async getValues() {
+      state.getValuesCallCount += 1;
       if (typeof values === 'function') return values();
       return values;
     },
@@ -204,5 +211,26 @@ describe('upsertMeetingWorkloadRule', () => {
         effectiveFromDate: null,
       }),
     ).rejects.toThrowError(/CountsTowardWorkload/);
+  });
+});
+
+describe('listMeetingRules', () => {
+  it('reads the sheet once and returns both category and workload rules', async () => {
+    const sheets = mockSheets([HEADER_WITH_WORKLOAD, ['series-a', '案件A', '', 'FALSE', '']]);
+    const result = await listMeetingRules(sheets, 'sid');
+    expect(sheets.getValuesCallCount).toBe(1);
+    expect(result.category).toEqual([
+      { recurringEventId: 'series-a', category: '案件A', effectiveFromDate: null },
+    ]);
+    expect(result.workload).toEqual([
+      { recurringEventId: 'series-a', countsTowardWorkload: false, effectiveFromDate: null },
+    ]);
+  });
+
+  it('degrades to empty rule lists when the sheet does not exist', async () => {
+    const sheets = mockSheets(() => {
+      throw new Error('Unable to parse range');
+    });
+    expect(await listMeetingRules(sheets, 'sid')).toEqual({ category: [], workload: [] });
   });
 });

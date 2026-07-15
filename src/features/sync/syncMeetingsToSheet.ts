@@ -3,10 +3,7 @@ import type { CalendarClient, CalendarEvent } from '@/lib/google/calendar';
 import type { SheetsClient, ValueRange } from '@/lib/google/sheets';
 import { TASKDB_HEADERS, TASKDB_SHEET, buildHeaderIndex } from '@/features/tasks/api/headers';
 import { buildTaskRow, parseTaskDbRows } from '@/features/tasks/api/serializers';
-import {
-  listMeetingCategoryRules,
-  listMeetingWorkloadRules,
-} from '@/features/tasks/api/meetingCategoryRules';
+import { listMeetingRules } from '@/features/tasks/api/meetingCategoryRules';
 import { formatDateForSheet } from '@/lib/google/sheetDate';
 import { TaskSource, TaskStatus, type Task } from '@/features/tasks/types';
 
@@ -140,10 +137,10 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
   }
 
   const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
-  const [rules, workloadRules] = await Promise.all([
-    listMeetingCategoryRules(sheets, spreadsheetId),
-    listMeetingWorkloadRules(sheets, spreadsheetId),
-  ]);
+  const { category: rules, workload: workloadRules } = await listMeetingRules(
+    sheets,
+    spreadsheetId,
+  );
   const ruleBySeriesId = new Map(rules.map((r) => [r.recurringEventId, r]));
   const workloadRuleBySeriesId = new Map(workloadRules.map((r) => [r.recurringEventId, r]));
 
