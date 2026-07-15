@@ -4,7 +4,7 @@ import type { SheetsClient, ValueRange } from '@/lib/google/sheets';
 import { TASKDB_HEADERS, TASKDB_SHEET, buildHeaderIndex } from '@/features/tasks/api/headers';
 import { parseEventTitle, parseTaskDbRows } from '@/features/tasks/api/serializers';
 import { formatDateForSheet } from '@/lib/google/sheetDate';
-import { TaskStatus } from '@/features/tasks/types';
+import { TaskSource, TaskStatus } from '@/features/tasks/types';
 
 const SYNC_WINDOW_DAYS = 15;
 
@@ -67,7 +67,17 @@ export async function syncCalendarToSheet(deps: SyncCalendarDeps): Promise<SyncC
   }
   const headerRow = sheetValues[0]!;
   const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
-  const sheetTasks = parseTaskDbRows(sheetValues);
+  // Meeting-sourced rows are synced from a *different* calendar
+  // (meetingCalendarId, see syncMeetingsToSheet.ts) and never patched or
+  // deleted from here — their calendarEventId lives in a completely
+  // disjoint ID namespace from this calendar's `events`, so without this
+  // filter every meeting row in the window would look "deleted on Calendar"
+  // to the pass below and get removed, only to have syncMeetingsToSheet
+  // recreate all of them as brand-new rows on this same run (and the next,
+  // and the next — an unbounded delete/recreate churn every sync cycle).
+  const sheetTasks = parseTaskDbRows(sheetValues).filter(
+    (t) => t.task.source !== TaskSource.Meeting,
+  );
 
   const sheetByEventId = new Map(
     sheetTasks.filter((t) => t.task.calendarEventId).map((t) => [t.task.calendarEventId, t]),

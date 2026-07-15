@@ -311,4 +311,45 @@ describe('syncCalendarToSheet', () => {
     expect(result.deletedCount).toBe(0);
     expect(sheets.deletedRows).toHaveLength(0);
   });
+
+  it('never touches meeting-sourced rows, even though their calendarEventId never matches this calendar', async () => {
+    // Meeting rows are synced from a *different* calendar (meetingCalendarId,
+    // see syncMeetingsToSheet.ts) — their calendarEventId values live in a
+    // disjoint ID namespace from this ordinary-task calendar's `events`, so
+    // they must never be treated as "deleted on Calendar" here (regression:
+    // this previously deleted every meeting row on every sync).
+    const HEADER_WITH_SOURCE = [...HEADER, 'Source'];
+    const start = new Date('2026-05-25T10:00:00+09:00');
+    const end = new Date('2026-05-25T10:30:00+09:00');
+    const sheets = mockSheets([
+      HEADER_WITH_SOURCE,
+      [
+        'tid-m',
+        '定例会議',
+        '',
+        30,
+        dateToSheetSerial(start),
+        dateToSheetSerial(end),
+        '',
+        '',
+        'Not Started',
+        'meeting-evt-1',
+        'Meeting',
+      ],
+    ]);
+    // This ordinary-task calendar's event list has nothing to do with
+    // meeting-evt-1 — it belongs to a different calendar entirely.
+    const calendar = mockCalendar([]);
+    const result = await syncCalendarToSheet({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+      now: () => new Date('2026-05-25T08:00:00+09:00'),
+    });
+    expect(result.deletedCount).toBe(0);
+    expect(result.updatedCount).toBe(0);
+    expect(sheets.deletedRows).toHaveLength(0);
+    expect(sheets.batchUpdates).toHaveLength(0);
+  });
 });
