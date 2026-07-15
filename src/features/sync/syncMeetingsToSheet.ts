@@ -23,6 +23,14 @@ export interface SyncMeetingsResult {
   addedCount: number;
   updatedCount: number;
   deletedCount: number;
+  /**
+   * Raw count of events the Calendar API returned for the ±15d window,
+   * before the self-declined filter — surfaced end-to-end (see useSync.ts,
+   * AppShell.tsx) so a "nothing added/updated" result is distinguishable
+   * from "the calendar fetch itself came back empty" without needing to
+   * inspect logs.
+   */
+  eventsFetched: number;
 }
 
 function defaultGenerateId(): string {
@@ -103,12 +111,12 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
   ]);
   let sheetValues = sheetValuesInitial;
   if (sheetValues.length === 0) {
-    return { addedCount: 0, updatedCount: 0, deletedCount: 0 };
+    return { addedCount: 0, updatedCount: 0, deletedCount: 0, eventsFetched: events.length };
   }
   let headerRow = sheetValues[0]!;
   const sourceCol = headerRow.findIndex((cell) => cell === SOURCE_HEADER);
   if (sourceCol === -1) {
-    return { addedCount: 0, updatedCount: 0, deletedCount: 0 };
+    return { addedCount: 0, updatedCount: 0, deletedCount: 0, eventsFetched: events.length };
   }
   let meetingTasks = parseTaskDbRows(sheetValues).filter(
     (t) => t.task.source === TaskSource.Meeting,
@@ -257,5 +265,6 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
     addedCount: rowsToAppend.length,
     updatedCount,
     deletedCount: deletedCount + dedupedCount,
+    eventsFetched: events.length,
   };
 }

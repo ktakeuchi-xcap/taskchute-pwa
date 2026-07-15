@@ -115,7 +115,12 @@ describe('syncMeetingsToSheet', () => {
       spreadsheetId: 'sid',
       meetingCalendarId: 'me@example.com',
     });
-    expect(result).toEqual({ addedCount: 0, updatedCount: 0, deletedCount: 0 });
+    expect(result).toEqual({
+      addedCount: 0,
+      updatedCount: 0,
+      deletedCount: 0,
+      eventsFetched: 1,
+    });
     expect(sheets.appended).toHaveLength(0);
   });
 
@@ -130,6 +135,7 @@ describe('syncMeetingsToSheet', () => {
       generateId: () => 'tid-new',
     });
     expect(result.addedCount).toBe(1);
+    expect(result.eventsFetched).toBe(1);
     expect(sheets.appended).toHaveLength(1);
     const [row] = sheets.appended[0]!;
     expect(row![HEADER.indexOf(TASKDB_HEADERS.TaskName)]).toBe('定例会議');

@@ -21,6 +21,13 @@ export interface SyncSummary {
   meetingsAdded: number;
   meetingsUpdated: number;
   meetingsDeleted: number;
+  /**
+   * Raw Calendar API event count for the meeting window, regardless of
+   * whether any of them ended up added/updated — lets a "0 meetings
+   * added/updated" result be told apart from "the calendar fetch itself
+   * came back empty" (see syncMeetingsToSheet.ts, AppShell.tsx).
+   */
+  meetingEventsFetched: number;
   waitingUpdated: number;
   waitingCleared: number;
 }
@@ -81,6 +88,7 @@ export function useSync() {
           meetingsAdded: 0,
           meetingsUpdated: 0,
           meetingsDeleted: 0,
+          meetingEventsFetched: 0,
           waitingUpdated: 0,
           waitingCleared: 0,
           finalTasks: qc.getQueryData<Task[]>(TASKS_QUERY_KEY) ?? [],
@@ -122,7 +130,7 @@ export function useSync() {
                 spreadsheetId: deps.spreadsheetId,
                 meetingCalendarId: deps.meetingCalendarId,
               })
-            : { addedCount: 0, updatedCount: 0, deletedCount: 0 };
+            : { addedCount: 0, updatedCount: 0, deletedCount: 0, eventsFetched: 0 };
 
           // Taken after every write above has settled, still under the lock
           // so no other device's sync can interleave a write before we
@@ -137,6 +145,7 @@ export function useSync() {
             meetingsAdded: meetings.addedCount,
             meetingsUpdated: meetings.updatedCount,
             meetingsDeleted: meetings.deletedCount,
+            meetingEventsFetched: meetings.eventsFetched,
             waitingUpdated: wait.updatedCount,
             waitingCleared: wait.clearedCount,
             finalTasks,
