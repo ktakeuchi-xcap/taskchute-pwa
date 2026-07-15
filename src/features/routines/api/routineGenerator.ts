@@ -141,6 +141,7 @@ export async function generateNextWeekRoutines(
         calendarEventId: event.id,
         source: null,
         recurringEventId: null,
+        countsTowardWorkload: true,
       };
       added.push(task);
       rowsToAppend.push(buildTaskRow(taskdbHeader, task));

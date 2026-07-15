@@ -3,8 +3,12 @@ import { TaskStatus, type Task } from '@/features/tasks/types';
 
 export const UNCATEGORIZED_LABEL = '未分類';
 
-/** Actual worked minutes for a Done task (0 for anything else or missing actual times). */
+/**
+ * Actual worked minutes for a Done task (0 for anything else, missing actual
+ * times, or a task opted out of workload via countsTowardWorkload).
+ */
 export function actualMinutes(task: Task): number {
+  if (!task.countsTowardWorkload) return 0;
   if (task.status !== TaskStatus.Done) return 0;
   if (!task.actualStartTime || !task.actualEndTime) return 0;
   const ms = task.actualEndTime.getTime() - task.actualStartTime.getTime();

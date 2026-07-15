@@ -190,6 +190,28 @@ describe('TaskRepository', () => {
     expect(row[HEADER.indexOf(TASKDB_HEADERS.Status)]).toBe(TaskStatus.NotStarted);
   });
 
+  it('addTask defaults countsTowardWorkload to true, and honors an explicit false', async () => {
+    const sheets = createMockSheets({ TaskDB: [HEADER], Settings: [] });
+    const calendar = createMockCalendar();
+    const repo = createTaskRepository({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+      now: () => new Date('2026-05-19T10:00:00+09:00'),
+      generateId: () => 'tid-fixed',
+    });
+    const defaulted = await repo.addTask({ taskName: 'A', estimateMinutes: 30 });
+    expect(defaulted.countsTowardWorkload).toBe(true);
+
+    const excluded = await repo.addTask({
+      taskName: 'B',
+      estimateMinutes: 30,
+      countsTowardWorkload: false,
+    });
+    expect(excluded.countsTowardWorkload).toBe(false);
+  });
+
   it('addTask without startTime appends after the last task end', async () => {
     const prevStart = new Date('2026-05-19T09:00:00+09:00');
     const prevEnd = new Date('2026-05-19T09:30:00+09:00');
@@ -284,6 +306,54 @@ describe('TaskRepository', () => {
         },
       },
     ]);
+  });
+
+  it('updateTask writes CountsTowardWorkload when the column exists, preserving it when input omits it', async () => {
+    const start = new Date('2026-05-19T10:00:00+09:00');
+    const end = new Date('2026-05-19T10:30:00+09:00');
+    const headerWithCol = [...HEADER, 'CountsTowardWorkload'];
+    const sheets = createMockSheets({
+      TaskDB: [
+        headerWithCol,
+        [
+          'tid-a',
+          'A',
+          '',
+          30,
+          dateToSheetSerial(start),
+          dateToSheetSerial(end),
+          '',
+          '',
+          'Not Started',
+          'evt-a',
+          '',
+        ],
+      ],
+      Settings: [],
+    });
+    const calendar = createMockCalendar();
+    const repo = createTaskRepository({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+    });
+
+    // Input omits countsTowardWorkload entirely — the existing value (true,
+    // blank cell) should be preserved, not silently reset.
+    const preserved = await repo.updateTask('tid-a', { taskName: 'A改', estimateMinutes: 30 });
+    expect(preserved.countsTowardWorkload).toBe(true);
+    const preservedRanges = sheets.batchUpdates[0]!.map((u) => u.range);
+    expect(preservedRanges.some((r) => /!K2$/.test(r))).toBe(true);
+
+    const excluded = await repo.updateTask('tid-a', {
+      taskName: 'A改',
+      estimateMinutes: 30,
+      countsTowardWorkload: false,
+    });
+    expect(excluded.countsTowardWorkload).toBe(false);
+    const excludedUpdate = sheets.batchUpdates[1]!.find((u) => /!K2$/.test(u.range));
+    expect(excludedUpdate?.values).toEqual([['FALSE']]);
   });
 
   it('throws when updating a non-existent task', async () => {
@@ -775,6 +845,193 @@ describe('TaskRepository', () => {
       });
       await expect(repo.setMeetingCategory('tid-manual', '案件A', 'this')).rejects.toThrowError(
         /not a meeting task/,
+      );
+    });
+  });
+
+  describe('setCountsTowardWorkload', () => {
+    const HEADER_WITH_WORKLOAD_COL = [
+      ...HEADER,
+      'Source',
+      'RecurringEventID',
+      'CountsTowardWorkload',
+    ];
+
+    function seriesRow(taskId: string, start: Date, end: Date, eventId: string, seriesId: string) {
+      return [
+        taskId,
+        '定例会議',
+        '',
+        30,
+        dateToSheetSerial(start),
+        dateToSheetSerial(end),
+        '',
+        '',
+        'Not Started',
+        eventId,
+        'Meeting',
+        seriesId,
+        '',
+      ];
+    }
+
+    function seriesSheets() {
+      return createMockSheets({
+        TaskDB: [
+          HEADER_WITH_WORKLOAD_COL,
+          seriesRow(
+            'tid-1',
+            new Date('2026-07-02T10:00:00+09:00'),
+            new Date('2026-07-02T10:30:00+09:00'),
+            'evt-1',
+            'series-a',
+          ),
+          seriesRow(
+            'tid-2',
+            new Date('2026-07-09T10:00:00+09:00'),
+            new Date('2026-07-09T10:30:00+09:00'),
+            'evt-2',
+            'series-a',
+          ),
+          seriesRow(
+            'tid-3',
+            new Date('2026-07-16T10:00:00+09:00'),
+            new Date('2026-07-16T10:30:00+09:00'),
+            'evt-3',
+            'series-a',
+          ),
+          seriesRow(
+            'tid-other',
+            new Date('2026-07-09T14:00:00+09:00'),
+            new Date('2026-07-09T14:30:00+09:00'),
+            'evt-other',
+            'series-b',
+          ),
+        ],
+        Settings: [],
+        MeetingCategoryRules: [
+          [
+            'RecurringEventID',
+            'Category',
+            'EffectiveFromDate',
+            'CountsTowardWorkload',
+            'WorkloadEffectiveFromDate',
+          ],
+        ],
+      });
+    }
+
+    it('scope "this" only updates the tagged occurrence', async () => {
+      const sheets = seriesSheets();
+      const repo = createTaskRepository({
+        sheets,
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+      const updated = await repo.setCountsTowardWorkload('tid-2', false, 'this');
+      expect(updated.countsTowardWorkload).toBe(false);
+      expect(sheets.batchUpdates).toHaveLength(1);
+      expect(sheets.batchUpdates[0]).toHaveLength(1);
+      expect(sheets.batchUpdates[0]![0]!.range).toMatch(/TaskDB!M3$/);
+      expect(sheets.batchUpdates[0]![0]!.values).toEqual([['FALSE']]);
+      expect(sheets.appendCalls).toHaveLength(0);
+    });
+
+    it('scope "from-this" updates this and later occurrences in the same series, and persists a rule', async () => {
+      const sheets = seriesSheets();
+      const repo = createTaskRepository({
+        sheets,
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+      await repo.setCountsTowardWorkload('tid-2', false, 'from-this');
+      const updatedRanges = sheets.batchUpdates[0]!.map((u) => u.range);
+      expect(updatedRanges).toContain('TaskDB!M3');
+      expect(updatedRanges).toContain('TaskDB!M4');
+      expect(updatedRanges).not.toContain('TaskDB!M2');
+      expect(updatedRanges).not.toContain('TaskDB!M5');
+      // No existing rule row for the series yet, so this appends a new one —
+      // touching only the workload-specific columns (Category stays blank).
+      expect(sheets.appendCalls).toEqual([[['series-a', '', '', 'FALSE', expect.any(String)]]]);
+    });
+
+    it('scope "all" updates every occurrence in the series regardless of time', async () => {
+      const sheets = seriesSheets();
+      const repo = createTaskRepository({
+        sheets,
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+      await repo.setCountsTowardWorkload('tid-2', false, 'all');
+      const updatedRanges = sheets.batchUpdates[0]!.map((u) => u.range);
+      expect(updatedRanges).toContain('TaskDB!M2');
+      expect(updatedRanges).toContain('TaskDB!M3');
+      expect(updatedRanges).toContain('TaskDB!M4');
+      expect(updatedRanges).not.toContain('TaskDB!M5');
+    });
+
+    it('rejects a non-meeting task', async () => {
+      const sheets = createMockSheets({
+        TaskDB: [
+          HEADER,
+          [
+            'tid-manual',
+            'A',
+            '',
+            30,
+            dateToSheetSerial(new Date('2026-07-09T10:00:00+09:00')),
+            dateToSheetSerial(new Date('2026-07-09T10:30:00+09:00')),
+            '',
+            '',
+            'Not Started',
+            'evt-manual',
+          ],
+        ],
+        Settings: [],
+      });
+      const repo = createTaskRepository({
+        sheets,
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+      await expect(repo.setCountsTowardWorkload('tid-manual', false, 'this')).rejects.toThrowError(
+        /not a meeting task/,
+      );
+    });
+
+    it('throws a clear error when the TaskDB CountsTowardWorkload column has not been added yet', async () => {
+      const HEADER_WITH_SOURCE = [...HEADER, 'Source'];
+      const sheets = createMockSheets({
+        TaskDB: [
+          HEADER_WITH_SOURCE,
+          [
+            'tid-m',
+            '定例会議',
+            '',
+            30,
+            dateToSheetSerial(new Date('2026-07-09T10:00:00+09:00')),
+            dateToSheetSerial(new Date('2026-07-09T10:30:00+09:00')),
+            '',
+            '',
+            'Not Started',
+            'evt-m',
+            'Meeting',
+          ],
+        ],
+        Settings: [],
+      });
+      const repo = createTaskRepository({
+        sheets,
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+      await expect(repo.setCountsTowardWorkload('tid-m', false, 'this')).rejects.toThrowError(
+        /CountsTowardWorkload/,
       );
     });
   });

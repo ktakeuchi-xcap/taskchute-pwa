@@ -16,6 +16,7 @@ function makeMeetingTask(overrides: Partial<Task> = {}): Task {
     calendarEventId: 'evt-1',
     source: TaskSource.Meeting,
     recurringEventId: 'series-1',
+    countsTowardWorkload: true,
     ...overrides,
   };
 }

@@ -3,7 +3,10 @@ import type { CalendarClient, CalendarEvent } from '@/lib/google/calendar';
 import type { SheetsClient, ValueRange } from '@/lib/google/sheets';
 import { TASKDB_HEADERS, TASKDB_SHEET, buildHeaderIndex } from '@/features/tasks/api/headers';
 import { buildTaskRow, parseTaskDbRows } from '@/features/tasks/api/serializers';
-import { listMeetingCategoryRules } from '@/features/tasks/api/meetingCategoryRules';
+import {
+  listMeetingCategoryRules,
+  listMeetingWorkloadRules,
+} from '@/features/tasks/api/meetingCategoryRules';
 import { formatDateForSheet } from '@/lib/google/sheetDate';
 import { TaskSource, TaskStatus, type Task } from '@/features/tasks/types';
 
@@ -137,8 +140,12 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
   }
 
   const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
-  const rules = await listMeetingCategoryRules(sheets, spreadsheetId);
+  const [rules, workloadRules] = await Promise.all([
+    listMeetingCategoryRules(sheets, spreadsheetId),
+    listMeetingWorkloadRules(sheets, spreadsheetId),
+  ]);
   const ruleBySeriesId = new Map(rules.map((r) => [r.recurringEventId, r]));
+  const workloadRuleBySeriesId = new Map(workloadRules.map((r) => [r.recurringEventId, r]));
 
   const byEventId = new Map(meetingTasks.map((t) => [t.task.calendarEventId, t]));
   const qualifyingEvents = events.filter((e) => !isDeclinedBySelf(e));
@@ -163,6 +170,13 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
         (!rule.effectiveFromDate || event.start.getTime() >= rule.effectiveFromDate.getTime())
           ? rule.category
           : null;
+      const workloadRule = workloadRuleBySeriesId.get(seriesId);
+      const countsTowardWorkload =
+        workloadRule &&
+        (!workloadRule.effectiveFromDate ||
+          event.start.getTime() >= workloadRule.effectiveFromDate.getTime())
+          ? workloadRule.countsTowardWorkload
+          : true;
       const task: Task = {
         taskId: generateId(),
         taskName: event.summary,
@@ -176,6 +190,7 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
         calendarEventId: event.id,
         source: TaskSource.Meeting,
         recurringEventId: seriesId,
+        countsTowardWorkload,
       };
       rowsToAppend.push(buildTaskRow(headerRow, task));
       continue;

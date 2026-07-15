@@ -11,8 +11,17 @@ import {
 } from '@/features/tasks/types';
 import { deriveMeetingTaskStatus } from '@/features/tasks/meetingStatus';
 import { buildHeaderIndex, TASKDB_HEADERS, TASKDB_SHEET, SETTINGS_SHEET } from './headers';
-import { upsertMeetingCategoryRule } from './meetingCategoryRules';
+import { upsertMeetingCategoryRule, upsertMeetingWorkloadRule } from './meetingCategoryRules';
 import { buildTaskRow, formatEventTitle, parseTaskDbRows, type TaskWithRow } from './serializers';
+
+// Looked up leniently (not via buildHeaderIndex/TASKDB_HEADERS), same as
+// Source/RecurringEventID in serializers.ts — a sheet that hasn't added this
+// column yet just can't have any task opted out of workload from here.
+const COUNTS_TOWARD_WORKLOAD_HEADER = 'CountsTowardWorkload';
+
+function findColumn(headerRow: unknown[], header: string): number {
+  return headerRow.findIndex((cell) => cell === header);
+}
 
 export interface TaskRepository {
   listTasks(): Promise<Task[]>;
@@ -28,6 +37,11 @@ export interface TaskRepository {
   setMeetingCategory(
     taskId: string,
     category: string | null,
+    scope: MeetingCategoryScope,
+  ): Promise<Task>;
+  setCountsTowardWorkload(
+    taskId: string,
+    counts: boolean,
     scope: MeetingCategoryScope,
   ): Promise<Task>;
 }
@@ -172,6 +186,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
         calendarEventId: event.id,
         source: null,
         recurringEventId: null,
+        countsTowardWorkload: input.countsTowardWorkload ?? true,
       };
 
       await sheets.appendRows(spreadsheetId, TASKDB_SHEET, [buildTaskRow(headerRow, task)]);
@@ -188,6 +203,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
       const startTime = input.startTime ?? target.task.scheduledStartTime;
       const endTime = new Date(startTime.getTime() + input.estimateMinutes * 60_000);
       const category = input.category ?? null;
+      const countsTowardWorkload = input.countsTowardWorkload ?? target.task.countsTowardWorkload;
 
       const updates: ValueRange[] = [
         {
@@ -211,6 +227,13 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
           values: [[formatDateForSheet(endTime)]],
         },
       ];
+      const countsCol = findColumn(headerRow, COUNTS_TOWARD_WORKLOAD_HEADER);
+      if (countsCol !== -1) {
+        updates.push({
+          range: cellAddress(target.rowNumber, countsCol + 1),
+          values: [[countsTowardWorkload ? '' : 'FALSE']],
+        });
+      }
       await sheets.batchUpdateValues(spreadsheetId, updates);
 
       if (target.task.calendarEventId) {
@@ -228,6 +251,7 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
         estimateMinutes: input.estimateMinutes,
         scheduledStartTime: startTime,
         scheduledEndTime: endTime,
+        countsTowardWorkload,
       };
     },
 
@@ -357,6 +381,54 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
       await sheets.batchUpdateValues(spreadsheetId, updates);
 
       return { ...target.task, category };
+    },
+
+    async setCountsTowardWorkload(taskId, counts, scope) {
+      const { headerRow, tasksWithRow } = await loadAll();
+      const target = tasksWithRow.find((t) => t.task.taskId === taskId);
+      if (!target) throw new Error(`Task not found: ${taskId}`);
+      if (target.task.source !== TaskSource.Meeting) {
+        throw new Error(`Task "${target.task.taskName}" is not a meeting task`);
+      }
+      const countsCol = findColumn(headerRow, COUNTS_TOWARD_WORKLOAD_HEADER);
+      if (countsCol === -1) {
+        throw new Error(
+          `"${TASKDB_SHEET}" シートに "${COUNTS_TOWARD_WORKLOAD_HEADER}" の見出し列を追加してください`,
+        );
+      }
+
+      const value = counts ? '' : 'FALSE';
+      const updates: ValueRange[] = [
+        { range: cellAddress(target.rowNumber, countsCol + 1), values: [[value]] },
+      ];
+
+      if (scope !== MeetingCategoryScope.This) {
+        const seriesId = target.task.recurringEventId;
+        if (!seriesId) {
+          throw new Error(`Meeting task "${target.task.taskName}" has no recurring series id`);
+        }
+        const others = tasksWithRow.filter(
+          (t) =>
+            t.rowNumber !== target.rowNumber &&
+            t.task.source === TaskSource.Meeting &&
+            t.task.recurringEventId === seriesId &&
+            (scope === MeetingCategoryScope.All ||
+              t.task.scheduledStartTime.getTime() >= target.task.scheduledStartTime.getTime()),
+        );
+        for (const other of others) {
+          updates.push({ range: cellAddress(other.rowNumber, countsCol + 1), values: [[value]] });
+        }
+        await upsertMeetingWorkloadRule(sheets, spreadsheetId, {
+          recurringEventId: seriesId,
+          countsTowardWorkload: counts,
+          effectiveFromDate:
+            scope === MeetingCategoryScope.All ? null : target.task.scheduledStartTime,
+        });
+      }
+
+      await sheets.batchUpdateValues(spreadsheetId, updates);
+
+      return { ...target.task, countsTowardWorkload: counts };
     },
   };
 }

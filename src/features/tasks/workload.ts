@@ -8,7 +8,9 @@ export const DAILY_CAPACITY_MINUTES = 480;
 export const WORKDAY_START_HOUR = 9;
 
 export function sumEstimateMinutes(tasks: Task[] | undefined): number {
-  return (tasks ?? []).reduce((sum, t) => sum + t.estimateMinutes, 0);
+  return (tasks ?? [])
+    .filter((t) => t.countsTowardWorkload)
+    .reduce((sum, t) => sum + t.estimateMinutes, 0);
 }
 
 /**

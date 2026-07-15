@@ -20,6 +20,7 @@ export function AddTaskForm() {
   const [minutes, setMinutes] = useState('30');
   const [category, setCategory] = useState('');
   const [startTime, setStartTime] = useState(defaultStartTime);
+  const [countsTowardWorkload, setCountsTowardWorkload] = useState(true);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -36,6 +37,7 @@ export function AddTaskForm() {
       estimateMinutes: Number(minutes),
       category: category || undefined,
       startTime: parseDatetimeLocalValue(startTime),
+      countsTowardWorkload,
     });
     if (!result.success) {
       const errors: Record<string, string> = {};
@@ -52,6 +54,7 @@ export function AddTaskForm() {
       setName('');
       setMinutes('30');
       setStartTime(defaultStartTime());
+      setCountsTowardWorkload(true);
     } catch (err) {
       setServerError(err instanceof Error ? err.message : String(err));
     }
@@ -128,6 +131,16 @@ export function AddTaskForm() {
           省略すると直前タスクの終了時刻、または現在時刻が使われます
         </p>
       </div>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={countsTowardWorkload}
+          onChange={(e) => setCountsTowardWorkload(e.target.checked)}
+          className="h-4 w-4"
+        />
+        工数に計上する
+      </label>
 
       <Button type="submit" size="lg" className="w-full" disabled={mutation.isPending}>
         {mutation.isPending ? '追加中…' : '＋ このタスクを追加'}

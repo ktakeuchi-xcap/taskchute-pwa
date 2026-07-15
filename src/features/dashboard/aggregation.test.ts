@@ -23,6 +23,7 @@ function makeTask(overrides: Partial<Task>): Task {
     calendarEventId: 'evt',
     source: null,
     recurringEventId: null,
+    countsTowardWorkload: true,
     ...overrides,
   };
 }
@@ -48,6 +49,16 @@ describe('actualMinutes', () => {
       actualEndTime: new Date('2026-06-01T09:45:00+09:00'),
     });
     expect(actualMinutes(task)).toBe(45);
+  });
+
+  it('returns 0 for a Done task opted out of workload via countsTowardWorkload', () => {
+    const task = makeTask({
+      status: TaskStatus.Done,
+      actualStartTime: new Date('2026-06-01T09:00:00+09:00'),
+      actualEndTime: new Date('2026-06-01T09:45:00+09:00'),
+      countsTowardWorkload: false,
+    });
+    expect(actualMinutes(task)).toBe(0);
   });
 });
 

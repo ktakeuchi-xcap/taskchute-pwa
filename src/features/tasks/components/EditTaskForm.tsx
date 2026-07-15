@@ -19,6 +19,7 @@ export function EditTaskForm({ task, onCancel, onSaved }: EditTaskFormProps) {
   const [minutes, setMinutes] = useState(String(task.estimateMinutes));
   const [category, setCategory] = useState(task.category ?? '');
   const [startTime, setStartTime] = useState(toDatetimeLocalValue(task.scheduledStartTime));
+  const [countsTowardWorkload, setCountsTowardWorkload] = useState(task.countsTowardWorkload);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -35,6 +36,7 @@ export function EditTaskForm({ task, onCancel, onSaved }: EditTaskFormProps) {
       estimateMinutes: Number(minutes),
       category: category || undefined,
       startTime: parseDatetimeLocalValue(startTime),
+      countsTowardWorkload,
     });
     if (!result.success) {
       const errors: Record<string, string> = {};
@@ -123,6 +125,16 @@ export function EditTaskForm({ task, onCancel, onSaved }: EditTaskFormProps) {
           onChange={(e) => setStartTime(e.target.value)}
         />
       </div>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={countsTowardWorkload}
+          onChange={(e) => setCountsTowardWorkload(e.target.checked)}
+          className="h-4 w-4"
+        />
+        工数に計上する
+      </label>
 
       <div className="flex gap-2 pt-1">
         <Button type="submit" className="flex-1" disabled={mutation.isPending}>

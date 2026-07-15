@@ -9,6 +9,7 @@ export const TaskInputSchema = z.object({
     .max(480, '見積は1〜480分の範囲で入力してください'),
   category: z.string().max(50).optional(),
   startTime: z.date().optional(),
+  countsTowardWorkload: z.boolean().optional(),
 });
 
 export type TaskInputDto = z.infer<typeof TaskInputSchema>;

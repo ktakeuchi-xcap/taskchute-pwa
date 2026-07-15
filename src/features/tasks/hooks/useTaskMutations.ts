@@ -93,6 +93,7 @@ export function useUpdateTask() {
                   (input.startTime ?? t.scheduledStartTime).getTime() +
                     input.estimateMinutes * 60_000,
                 ),
+                countsTowardWorkload: input.countsTowardWorkload ?? t.countsTowardWorkload,
               }
             : t,
         ),
@@ -148,6 +149,30 @@ export function useSetMeetingCategory() {
     mutationFn: async ({ taskId, category, scope }) => {
       if (!repo) throw new Error('repository unavailable');
       return repo.setMeetingCategory(taskId, category, scope);
+    },
+    // A scope of "from-this"/"all" can touch other rows in the same series
+    // too, so there's no simple optimistic patch — just refetch (unless a
+    // sync is already about to do that for us).
+    onSuccess: () => {
+      if (!isSyncing) qc.invalidateQueries({ queryKey: TASKS_QUERY_KEY });
+    },
+  });
+}
+
+interface SetCountsTowardWorkloadInput {
+  taskId: string;
+  counts: boolean;
+  scope: MeetingCategoryScope;
+}
+
+export function useSetCountsTowardWorkload() {
+  const repo = useTaskRepository();
+  const qc = useQueryClient();
+  const isSyncing = useIsSyncing();
+  return useMutation<Task, Error, SetCountsTowardWorkloadInput>({
+    mutationFn: async ({ taskId, counts, scope }) => {
+      if (!repo) throw new Error('repository unavailable');
+      return repo.setCountsTowardWorkload(taskId, counts, scope);
     },
     // A scope of "from-this"/"all" can touch other rows in the same series
     // too, so there's no simple optimistic patch — just refetch (unless a

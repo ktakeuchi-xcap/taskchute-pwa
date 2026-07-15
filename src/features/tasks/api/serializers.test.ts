@@ -107,6 +107,40 @@ describe('parseTaskDbRows', () => {
     const [parsed] = parseTaskDbRows([headerWithSource, row]);
     expect(parsed!.task.source).toBe(TaskSource.Meeting);
   });
+
+  it('defaults countsTowardWorkload to true when the column is missing', () => {
+    const start = new Date('2026-05-19T10:00:00+09:00');
+    const end = new Date('2026-05-19T10:30:00+09:00');
+    const row = HEADER.map((h) => makeBaseRowData(start, end)[h]);
+    const [parsed] = parseTaskDbRows([HEADER, row]);
+    expect(parsed!.task.countsTowardWorkload).toBe(true);
+  });
+
+  it('defaults countsTowardWorkload to true when the column is present but blank', () => {
+    const start = new Date('2026-05-19T10:00:00+09:00');
+    const end = new Date('2026-05-19T10:30:00+09:00');
+    const headerWithCol = [...HEADER, 'CountsTowardWorkload'];
+    const rowData: Record<string, unknown> = {
+      ...makeBaseRowData(start, end),
+      CountsTowardWorkload: '',
+    };
+    const row = headerWithCol.map((h) => rowData[h]);
+    const [parsed] = parseTaskDbRows([headerWithCol, row]);
+    expect(parsed!.task.countsTowardWorkload).toBe(true);
+  });
+
+  it('reads countsTowardWorkload as false only for an explicit FALSE', () => {
+    const start = new Date('2026-05-19T10:00:00+09:00');
+    const end = new Date('2026-05-19T10:30:00+09:00');
+    const headerWithCol = [...HEADER, 'CountsTowardWorkload'];
+    const rowData: Record<string, unknown> = {
+      ...makeBaseRowData(start, end),
+      CountsTowardWorkload: 'FALSE',
+    };
+    const row = headerWithCol.map((h) => rowData[h]);
+    const [parsed] = parseTaskDbRows([headerWithCol, row]);
+    expect(parsed!.task.countsTowardWorkload).toBe(false);
+  });
 });
 
 describe('buildTaskRow', () => {
@@ -138,6 +172,7 @@ describe('buildTaskRow', () => {
       calendarEventId: 'evt-1',
       source: null,
       recurringEventId: null,
+      countsTowardWorkload: true,
     };
     const row = buildTaskRow(reordered, task);
     expect(row[reordered.indexOf(TASKDB_HEADERS.TaskID)]).toBe('tid-1');
@@ -164,12 +199,42 @@ describe('buildTaskRow', () => {
       calendarEventId: 'evt-1',
       source: TaskSource.Meeting,
       recurringEventId: 'series-1',
+      countsTowardWorkload: true,
     };
     expect(() => buildTaskRow(HEADER, task)).not.toThrow();
 
     const headerWithSource = [...HEADER, 'Source'];
     const row = buildTaskRow(headerWithSource, task);
     expect(row[headerWithSource.indexOf('Source')]).toBe('Meeting');
+  });
+
+  it('writes FALSE for CountsTowardWorkload when excluded, blank when the default applies', () => {
+    const start = new Date('2026-05-19T10:00:00+09:00');
+    const end = new Date('2026-05-19T10:30:00+09:00');
+    const baseTask: Task = {
+      taskId: 'tid-1',
+      taskName: '打ち合わせ',
+      category: null,
+      estimateMinutes: 30,
+      scheduledStartTime: start,
+      scheduledEndTime: end,
+      actualStartTime: null,
+      actualEndTime: null,
+      status: TaskStatus.NotStarted,
+      calendarEventId: 'evt-1',
+      source: null,
+      recurringEventId: null,
+      countsTowardWorkload: true,
+    };
+    const headerWithCol = [...HEADER, 'CountsTowardWorkload'];
+
+    const includedRow = buildTaskRow(headerWithCol, baseTask);
+    expect(includedRow[headerWithCol.indexOf('CountsTowardWorkload')]).toBe('');
+
+    const excludedRow = buildTaskRow(headerWithCol, { ...baseTask, countsTowardWorkload: false });
+    expect(excludedRow[headerWithCol.indexOf('CountsTowardWorkload')]).toBe('FALSE');
+
+    expect(() => buildTaskRow(HEADER, { ...baseTask, countsTowardWorkload: false })).not.toThrow();
   });
 });
 

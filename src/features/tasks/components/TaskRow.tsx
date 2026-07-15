@@ -1,4 +1,4 @@
-import { Pencil, Tag, Trash2 } from 'lucide-react';
+import { Pencil, Scale, Tag, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,8 @@ interface TaskRowProps {
   onEdit?: () => void;
   /** Meeting tasks can't be edited, but can still have a 案件 tag assigned. */
   onTagCategory?: () => void;
+  /** Meeting tasks can't be edited, but can still be opted out of workload totals. */
+  onSetWorkload?: () => void;
 }
 
 const STATUS_DOT: Record<TaskStatus, string> = {
@@ -30,6 +32,7 @@ export function TaskRow({
   isDeleting = false,
   onEdit,
   onTagCategory,
+  onSetWorkload,
 }: TaskRowProps) {
   const isDone = task.status === TaskStatus.Done;
   const isInProgress = task.status === TaskStatus.InProgress;
@@ -103,6 +106,12 @@ export function TaskRow({
               <CategoryTag name={task.category} colorKey={categoryColorMap.get(task.category)} />
             </>
           ) : null}
+          {!task.countsTowardWorkload ? (
+            <>
+              {' ・ '}
+              <span className="rounded bg-gray-100 px-1 py-0.5 text-gray-500">工数対象外</span>
+            </>
+          ) : null}
         </div>
       </div>
       <div className="flex flex-shrink-0 flex-col items-end gap-1">
@@ -122,6 +131,17 @@ export function TaskRow({
           onClick={onTagCategory}
         >
           <Tag className="h-4 w-4" />
+        </Button>
+      ) : null}
+      {onSetWorkload && isMeeting ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-foreground"
+          aria-label="工数への計上を設定"
+          onClick={onSetWorkload}
+        >
+          <Scale className="h-4 w-4" />
         </Button>
       ) : null}
       {onEdit && !isMeeting ? (

@@ -3,6 +3,7 @@ import { TaskRow } from './TaskRow';
 import { DraggableTaskRow } from './DraggableTaskRow';
 import { EditTaskForm } from './EditTaskForm';
 import { SetMeetingCategoryForm } from './SetMeetingCategoryForm';
+import { SetMeetingWorkloadForm } from './SetMeetingWorkloadForm';
 import { isAllDayMeeting } from '@/features/tasks/meetingStatus';
 import { TaskSource, type Task } from '@/features/tasks/types';
 
@@ -31,6 +32,7 @@ export function TaskList({
 }: TaskListProps) {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [taggingTaskId, setTaggingTaskId] = useState<string | null>(null);
+  const [workloadTaskId, setWorkloadTaskId] = useState<string | null>(null);
 
   if (tasks.length === 0) {
     return (
@@ -56,6 +58,13 @@ export function TaskList({
             onCancel={() => setTaggingTaskId(null)}
             onSaved={() => setTaggingTaskId(null)}
           />
+        ) : workloadTaskId === task.taskId ? (
+          <SetMeetingWorkloadForm
+            key={task.taskId}
+            task={task}
+            onCancel={() => setWorkloadTaskId(null)}
+            onSaved={() => setWorkloadTaskId(null)}
+          />
         ) : draggable && task.source !== TaskSource.Meeting ? (
           <DraggableTaskRow
             key={task.taskId}
@@ -74,6 +83,7 @@ export function TaskList({
             isDeleting={isDeleting}
             onEdit={() => setEditingTaskId(task.taskId)}
             onTagCategory={() => setTaggingTaskId(task.taskId)}
+            onSetWorkload={() => setWorkloadTaskId(task.taskId)}
           />
         ),
       )}

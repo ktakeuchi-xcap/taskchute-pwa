@@ -34,6 +34,13 @@ export interface Task {
    * (see MeetingCategoryScope).
    */
   recurringEventId: string | null;
+  /**
+   * Whether this task's minutes count toward workload totals (today's
+   * workload gauge, and the 実績 dashboard's monthly/daily aggregates).
+   * Defaults to true — most tasks should count; this is an opt-out for
+   * things like an FYI meeting or an already-tracked-elsewhere task.
+   */
+  countsTowardWorkload: boolean;
 }
 
 export interface TaskInput {
@@ -41,6 +48,7 @@ export interface TaskInput {
   estimateMinutes: number;
   category?: string;
   startTime?: Date;
+  countsTowardWorkload?: boolean;
 }
 
 export interface CategoryInfo {

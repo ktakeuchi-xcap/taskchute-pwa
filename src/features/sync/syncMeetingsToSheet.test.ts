@@ -345,6 +345,46 @@ describe('syncMeetingsToSheet', () => {
     expect(row![HEADER.indexOf(TASKDB_HEADERS.Category)]).toBe('');
   });
 
+  it('applies an "all occurrences" workload-exclusion rule to a newly-synced occurrence', async () => {
+    const HEADER_WITH_WORKLOAD = [...HEADER, 'CountsTowardWorkload'];
+    const RULES_HEADER = [
+      'RecurringEventID',
+      'Category',
+      'EffectiveFromDate',
+      'CountsTowardWorkload',
+      'WorkloadEffectiveFromDate',
+    ];
+    const sheets = mockSheets(
+      [HEADER_WITH_WORKLOAD],
+      [RULES_HEADER, ['series-a', '', '', 'FALSE', '']],
+    );
+    const calendar = mockCalendar([baseEvent({ id: 'evt-9', recurringEventId: 'series-a' })]);
+    const result = await syncMeetingsToSheet({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      meetingCalendarId: 'me@example.com',
+    });
+    expect(result.addedCount).toBe(1);
+    const [row] = sheets.appended[0]!;
+    expect(row![HEADER_WITH_WORKLOAD.indexOf('CountsTowardWorkload')]).toBe('FALSE');
+  });
+
+  it('defaults a newly-synced occurrence to counting toward workload when no rule applies', async () => {
+    const HEADER_WITH_WORKLOAD = [...HEADER, 'CountsTowardWorkload'];
+    const sheets = mockSheets([HEADER_WITH_WORKLOAD]);
+    const calendar = mockCalendar([baseEvent({ id: 'evt-10' })]);
+    const result = await syncMeetingsToSheet({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      meetingCalendarId: 'me@example.com',
+    });
+    expect(result.addedCount).toBe(1);
+    const [row] = sheets.appended[0]!;
+    expect(row![HEADER_WITH_WORKLOAD.indexOf('CountsTowardWorkload')]).toBe('');
+  });
+
   it('self-heals a duplicate row (e.g. from a cross-device race) by deleting the extra one', async () => {
     const start = new Date('2026-07-09T10:00:00+09:00');
     const end = new Date('2026-07-09T10:30:00+09:00');

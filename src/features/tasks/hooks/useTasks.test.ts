@@ -18,6 +18,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     calendarEventId: 'evt',
     source: null,
     recurringEventId: null,
+    countsTowardWorkload: true,
     ...overrides,
   };
 }

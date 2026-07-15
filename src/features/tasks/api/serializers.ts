@@ -13,6 +13,7 @@ const STATUS_VALUES: ReadonlySet<string> = new Set<TaskStatus>(Object.values(Tas
 // before — tasks just read/write as ordinary (non-meeting) tasks.
 const SOURCE_HEADER = 'Source';
 const RECURRING_EVENT_ID_HEADER = 'RecurringEventID';
+const COUNTS_TOWARD_WORKLOAD_HEADER = 'CountsTowardWorkload';
 
 function findColumn(headerRow: unknown[], header: string): number {
   return headerRow.findIndex((cell) => cell === header);
@@ -61,6 +62,7 @@ export function parseTaskDbRows(values: unknown[][]): TaskWithRow[] {
   const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
   const sourceCol = findColumn(headerRow, SOURCE_HEADER);
   const recurringEventIdCol = findColumn(headerRow, RECURRING_EVENT_ID_HEADER);
+  const countsTowardWorkloadCol = findColumn(headerRow, COUNTS_TOWARD_WORKLOAD_HEADER);
 
   const tasks: TaskWithRow[] = [];
   rows.forEach((row, i) => {
@@ -88,6 +90,12 @@ export function parseTaskDbRows(values: unknown[][]): TaskWithRow[] {
         source: sourceCol === -1 ? null : asSource(row[sourceCol]),
         recurringEventId:
           recurringEventIdCol === -1 ? null : asNullableString(row[recurringEventIdCol]),
+        // Missing column or blank cell both default to true (計上する) — an
+        // explicit "FALSE" is the only way to opt a task out.
+        countsTowardWorkload:
+          countsTowardWorkloadCol === -1
+            ? true
+            : asString(row[countsTowardWorkloadCol]) !== 'FALSE',
       },
     });
   });
@@ -102,6 +110,7 @@ export function buildTaskRow(headerRow: unknown[], task: Task): unknown[] {
   const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
   const sourceCol = findColumn(headerRow, SOURCE_HEADER);
   const recurringEventIdCol = findColumn(headerRow, RECURRING_EVENT_ID_HEADER);
+  const countsTowardWorkloadCol = findColumn(headerRow, COUNTS_TOWARD_WORKLOAD_HEADER);
   const row = new Array<unknown>(headerRow.length).fill('');
   row[idx.TaskID] = task.taskId;
   row[idx.TaskName] = task.taskName;
@@ -117,6 +126,12 @@ export function buildTaskRow(headerRow: unknown[], task: Task): unknown[] {
   // the row still writes correctly as an ordinary task.
   if (sourceCol !== -1) row[sourceCol] = task.source ?? '';
   if (recurringEventIdCol !== -1) row[recurringEventIdCol] = task.recurringEventId ?? '';
+  // Left blank for the (much more common) true case, matching how a blank
+  // cell already reads as true in parseTaskDbRows above — keeps the sheet
+  // free of "TRUE" clutter for tasks that just use the default.
+  if (countsTowardWorkloadCol !== -1) {
+    row[countsTowardWorkloadCol] = task.countsTowardWorkload ? '' : 'FALSE';
+  }
   return row;
 }
 

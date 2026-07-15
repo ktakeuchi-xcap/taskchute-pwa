@@ -3,21 +3,27 @@ import {
   MEETING_CATEGORY_RULES_SHEET,
   listMeetingCategoryRules,
   upsertMeetingCategoryRule,
+  listMeetingWorkloadRules,
+  upsertMeetingWorkloadRule,
 } from './meetingCategoryRules';
-import type { SheetsClient } from '@/lib/google/sheets';
+import type { SheetsClient, ValueRange } from '@/lib/google/sheets';
 import { dateToSheetSerial } from '@/lib/google/sheetDate';
 
 const HEADER = ['RecurringEventID', 'Category', 'EffectiveFromDate'];
+const HEADER_WITH_WORKLOAD = [...HEADER, 'CountsTowardWorkload', 'WorkloadEffectiveFromDate'];
 
 function mockSheets(values: unknown[][] | (() => never)): SheetsClient & {
   updateCalls: Array<{ range: string; values: unknown[][] }>;
   appended: unknown[][][];
+  batchUpdates: ValueRange[][];
 } {
   const updateCalls: Array<{ range: string; values: unknown[][] }> = [];
   const appended: unknown[][][] = [];
+  const batchUpdates: ValueRange[][] = [];
   return {
     updateCalls,
     appended,
+    batchUpdates,
     async getValues() {
       if (typeof values === 'function') return values();
       return values;
@@ -28,7 +34,9 @@ function mockSheets(values: unknown[][] | (() => never)): SheetsClient & {
     async updateRange(_id, range, rowValues) {
       updateCalls.push({ range, values: rowValues });
     },
-    async batchUpdateValues() {},
+    async batchUpdateValues(_id, data) {
+      batchUpdates.push(data);
+    },
     async deleteRow() {},
     async deleteRows() {},
     async getSheetMetadata() {
@@ -103,5 +111,98 @@ describe('upsertMeetingCategoryRule', () => {
         effectiveFromDate: null,
       }),
     ).rejects.toThrowError(/MeetingCategoryRules/);
+  });
+});
+
+describe('listMeetingWorkloadRules', () => {
+  it('returns [] when the sheet does not exist yet', async () => {
+    const sheets = mockSheets(() => {
+      throw new Error('Unable to parse range');
+    });
+    expect(await listMeetingWorkloadRules(sheets, 'sid')).toEqual([]);
+  });
+
+  it('returns [] when the workload columns have not been added yet', async () => {
+    const sheets = mockSheets([HEADER, ['series-a', '案件A', '']]);
+    expect(await listMeetingWorkloadRules(sheets, 'sid')).toEqual([]);
+  });
+
+  it('parses an explicit FALSE as excluded, and a blank cell as included', async () => {
+    const sheets = mockSheets([
+      HEADER_WITH_WORKLOAD,
+      ['series-a', '', '', 'FALSE', ''],
+      ['series-b', '', '', '', ''],
+    ]);
+    const rules = await listMeetingWorkloadRules(sheets, 'sid');
+    expect(rules).toEqual([
+      { recurringEventId: 'series-a', countsTowardWorkload: false, effectiveFromDate: null },
+      { recurringEventId: 'series-b', countsTowardWorkload: true, effectiveFromDate: null },
+    ]);
+  });
+
+  it('parses a set WorkloadEffectiveFromDate', async () => {
+    const from = new Date('2026-07-09T00:00:00+09:00');
+    const sheets = mockSheets([
+      HEADER_WITH_WORKLOAD,
+      ['series-a', '', '', 'FALSE', dateToSheetSerial(from)],
+    ]);
+    const rules = await listMeetingWorkloadRules(sheets, 'sid');
+    expect(rules[0]!.effectiveFromDate?.toISOString()).toBe(from.toISOString());
+  });
+});
+
+describe('upsertMeetingWorkloadRule', () => {
+  it('appends a new row when no rule (category or workload) exists for the series yet', async () => {
+    const sheets = mockSheets([HEADER_WITH_WORKLOAD]);
+    await upsertMeetingWorkloadRule(sheets, 'sid', {
+      recurringEventId: 'series-a',
+      countsTowardWorkload: false,
+      effectiveFromDate: null,
+    });
+    expect(sheets.appended).toEqual([[['series-a', '', '', 'FALSE', '']]]);
+  });
+
+  it('updates only the workload cells of an existing row, leaving Category/EffectiveFromDate untouched', async () => {
+    const sheets = mockSheets([
+      HEADER_WITH_WORKLOAD,
+      ['series-a', '既存の案件', '2026-01-01', '', ''],
+    ]);
+    await upsertMeetingWorkloadRule(sheets, 'sid', {
+      recurringEventId: 'series-a',
+      countsTowardWorkload: false,
+      effectiveFromDate: null,
+    });
+    expect(sheets.appended).toHaveLength(0);
+    expect(sheets.updateCalls).toHaveLength(0);
+    expect(sheets.batchUpdates).toEqual([
+      [
+        { range: `${MEETING_CATEGORY_RULES_SHEET}!D2`, values: [['FALSE']] },
+        { range: `${MEETING_CATEGORY_RULES_SHEET}!E2`, values: [['']] },
+      ],
+    ]);
+  });
+
+  it('throws a clear error when the sheet has not been created yet', async () => {
+    const sheets = mockSheets(() => {
+      throw new Error('Unable to parse range');
+    });
+    await expect(
+      upsertMeetingWorkloadRule(sheets, 'sid', {
+        recurringEventId: 'series-a',
+        countsTowardWorkload: false,
+        effectiveFromDate: null,
+      }),
+    ).rejects.toThrowError(/MeetingCategoryRules/);
+  });
+
+  it('throws a clear error when the workload columns have not been added yet', async () => {
+    const sheets = mockSheets([HEADER, ['series-a', '案件A', '']]);
+    await expect(
+      upsertMeetingWorkloadRule(sheets, 'sid', {
+        recurringEventId: 'series-a',
+        countsTowardWorkload: false,
+        effectiveFromDate: null,
+      }),
+    ).rejects.toThrowError(/CountsTowardWorkload/);
   });
 });
