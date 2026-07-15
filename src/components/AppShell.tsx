@@ -10,6 +10,7 @@ function formatSyncSuccess(result: SyncSummary): string {
   return (
     `同期完了: タスク ${result.tasksUpdated} 件更新 / 確認待ち ${result.waitingUpdated} 件更新` +
     ` / 会議カレンダー取得 ${result.meetingEventsFetched} 件` +
+    ` / 既存の会議行 ${result.existingMeetingRowsFound} 件認識` +
     (result.tasksDeleted > 0 ? ` / タスク ${result.tasksDeleted} 件削除` : '') +
     (result.waitingCleared > 0 ? ` / 確認待ち ${result.waitingCleared} 件削除` : '') +
     (result.meetingsAdded > 0 ? ` / 会議 ${result.meetingsAdded} 件追加` : '') +

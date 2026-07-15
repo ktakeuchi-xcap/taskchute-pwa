@@ -121,6 +121,7 @@ describe('syncMeetingsToSheet', () => {
       deletedCount: 0,
       eventsFetched: 1,
       deletionsSkippedForSafety: 0,
+      existingMeetingRowsFound: 0,
     });
     expect(sheets.appended).toHaveLength(0);
   });
@@ -207,6 +208,7 @@ describe('syncMeetingsToSheet', () => {
       meetingCalendarId: 'me@example.com',
     });
     expect(result.updatedCount).toBe(1);
+    expect(result.existingMeetingRowsFound).toBe(1);
     expect(sheets.appended).toHaveLength(0);
     const ranges = sheets.batchUpdates[0]!.map((u) => u.range);
     expect(ranges.some((r) => /TaskDB!B2$/.test(r))).toBe(true); // TaskName

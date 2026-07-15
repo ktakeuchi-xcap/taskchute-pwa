@@ -39,6 +39,13 @@ export interface SyncSummary {
    * misidentifying rows as deleted and needs investigating.
    */
   deletionsSkippedForSafety: number;
+  /**
+   * How many rows this sync recognized as existing meeting rows before
+   * deciding what's new — see syncMeetingsToSheet.ts. Stays near 0 across
+   * repeated syncs would mean existing rows aren't being recognized as
+   * existing, not that events are genuinely new each time.
+   */
+  existingMeetingRowsFound: number;
 }
 
 interface SyncMutationResult extends SyncSummary {
@@ -101,6 +108,7 @@ export function useSync() {
           waitingUpdated: 0,
           waitingCleared: 0,
           deletionsSkippedForSafety: 0,
+          existingMeetingRowsFound: 0,
           finalTasks: qc.getQueryData<Task[]>(TASKS_QUERY_KEY) ?? [],
         };
 
@@ -146,6 +154,7 @@ export function useSync() {
                 deletedCount: 0,
                 eventsFetched: 0,
                 deletionsSkippedForSafety: 0,
+                existingMeetingRowsFound: 0,
               };
 
           // Taken after every write above has settled, still under the lock
@@ -166,6 +175,7 @@ export function useSync() {
             waitingCleared: wait.clearedCount,
             deletionsSkippedForSafety:
               cal.deletionsSkippedForSafety + meetings.deletionsSkippedForSafety,
+            existingMeetingRowsFound: meetings.existingMeetingRowsFound,
             finalTasks,
           };
         } finally {

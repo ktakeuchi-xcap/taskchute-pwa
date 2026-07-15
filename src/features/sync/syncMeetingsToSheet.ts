@@ -46,6 +46,14 @@ export interface SyncMeetingsResult {
    * risk mass-deleting real data — see the constant's comment.
    */
   deletionsSkippedForSafety: number;
+  /**
+   * How many rows this run recognized as *existing* meeting rows (Source=
+   * Meeting, parsed successfully) before deciding what's new — surfaced to
+   * tell apart "these events really are new" from "existing rows aren't
+   * being recognized as existing" (e.g. a parsing/matching problem would
+   * show as this staying at/near 0 even after a prior run added many rows).
+   */
+  existingMeetingRowsFound: number;
 }
 
 function defaultGenerateId(): string {
@@ -132,6 +140,7 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
       deletedCount: 0,
       eventsFetched: events.length,
       deletionsSkippedForSafety: 0,
+      existingMeetingRowsFound: 0,
     };
   }
   let headerRow = sheetValues[0]!;
@@ -143,6 +152,7 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
       deletedCount: 0,
       eventsFetched: events.length,
       deletionsSkippedForSafety: 0,
+      existingMeetingRowsFound: 0,
     };
   }
   let meetingTasks = parseTaskDbRows(sheetValues).filter(
@@ -297,5 +307,6 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
     deletedCount: deletedCount + dedupedCount,
     eventsFetched: events.length,
     deletionsSkippedForSafety,
+    existingMeetingRowsFound: meetingTasks.length,
   };
 }
