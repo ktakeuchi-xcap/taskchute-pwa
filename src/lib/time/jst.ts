@@ -31,4 +31,14 @@ export function jstToday(): Date {
   return toZonedTime(new Date(), JST_TZ);
 }
 
+/** ISO day-of-week in JST: 1 (Monday) .. 7 (Sunday) — timezone-safe unlike `date.getDay()`. */
+export function jstIsoDayOfWeek(date: Date): number {
+  return Number(formatJst(date, 'i'));
+}
+
+/** The Monday (JST calendar date) of the week containing `date`. */
+export function startOfJstWeek(date: Date): Date {
+  return addDays(date, -(jstIsoDayOfWeek(date) - 1));
+}
+
 export { isSameDay, startOfDay, endOfDay, addDays };

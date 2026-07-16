@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { addDays } from 'date-fns';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
@@ -12,23 +13,17 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
-import { formatJst, jstDate, WEEKDAY_JA } from '@/lib/time/jst';
+import { formatJst, jstDate, jstIsoDayOfWeek, startOfJstWeek, WEEKDAY_JA } from '@/lib/time/jst';
 import { useTasks } from '@/features/tasks/hooks/useTasks';
 import { useDeleteTask, useUpdateTask } from '@/features/tasks/hooks/useTaskMutations';
 import { TaskList } from '@/features/tasks/components/TaskList';
 import { DAILY_CAPACITY_MINUTES, sumEstimateMinutes } from '@/features/tasks/workload';
 import type { Task } from '@/features/tasks/types';
 
-const DAYS_BEFORE_TODAY = 3;
-const DAYS_AFTER_TODAY = 14;
-/** Index of "today" within the day list — also the default selection. */
-const DEFAULT_SELECTED_INDEX = DAYS_BEFORE_TODAY;
-
-function buildDayList(): Date[] {
-  const today = new Date();
-  const start = addDays(today, -DAYS_BEFORE_TODAY);
-  const totalDays = DAYS_BEFORE_TODAY + DAYS_AFTER_TODAY + 1; // +1 for today itself
-  return Array.from({ length: totalDays }, (_, i) => addDays(start, i));
+/** Monday..Sunday for "this week + weekOffset weeks" (0 = the week containing today). */
+function buildWeekDays(weekOffset: number): Date[] {
+  const monday = addDays(startOfJstWeek(new Date()), weekOffset * 7);
+  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
 }
 
 interface DayButtonProps {
@@ -39,11 +34,15 @@ interface DayButtonProps {
   onSelect: () => void;
 }
 
-/** A date in the day strip — also a drop target for dragged tasks. */
+/** A date in the week strip — also a drop target for dragged tasks. */
 function DayButton({ date, dateKey, active, dayMinutes, onSelect }: DayButtonProps) {
   const { setNodeRef, isOver } = useDroppable({ id: dateKey });
   const pct = Math.min(100, Math.round((dayMinutes / DAILY_CAPACITY_MINUTES) * 100));
   const overCapacity = dayMinutes > DAILY_CAPACITY_MINUTES;
+  // JST-safe day-of-week (0=Sun..6=Sat, matching WEEKDAY_JA/getDay's own
+  // convention) — date.getDay() reads the runtime's local timezone, which
+  // only happens to agree with JST when the device itself is set to Japan.
+  const jstDow = jstIsoDayOfWeek(date) % 7;
 
   return (
     <button
@@ -51,7 +50,7 @@ function DayButton({ date, dateKey, active, dayMinutes, onSelect }: DayButtonPro
       type="button"
       onClick={onSelect}
       className={cn(
-        'flex h-14 w-12 flex-shrink-0 flex-col items-center justify-center rounded-lg border text-xs transition-colors',
+        'flex h-14 flex-1 flex-col items-center justify-center rounded-lg border text-xs transition-colors',
         active
           ? 'border-primary bg-primary text-primary-foreground'
           : 'border-border bg-card text-foreground hover:bg-accent',
@@ -61,11 +60,11 @@ function DayButton({ date, dateKey, active, dayMinutes, onSelect }: DayButtonPro
       <span
         className={cn(
           'text-[10px]',
-          !active && date.getDay() === 0 && 'text-destructive',
-          !active && date.getDay() === 6 && 'text-blue-600',
+          !active && jstDow === 0 && 'text-destructive',
+          !active && jstDow === 6 && 'text-blue-600',
         )}
       >
-        {WEEKDAY_JA[date.getDay()]}
+        {WEEKDAY_JA[jstDow]}
       </span>
       <span className="font-semibold">{formatJst(date, 'M/d')}</span>
       {/* 工数バー：1日の許容量(480分=8時間)を100%とした充填率 */}
@@ -90,10 +89,9 @@ function DayButton({ date, dateKey, active, dayMinutes, onSelect }: DayButtonPro
 }
 
 export function UpcomingRoute() {
-  const days = useMemo(() => buildDayList(), []);
-  const [selectedKey, setSelectedKey] = useState(() =>
-    formatJst(days[DEFAULT_SELECTED_INDEX]!, 'yyyy-MM-dd'),
-  );
+  const [weekOffset, setWeekOffset] = useState(0);
+  const days = useMemo(() => buildWeekDays(weekOffset), [weekOffset]);
+  const [selectedKey, setSelectedKey] = useState(() => formatJst(new Date(), 'yyyy-MM-dd'));
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
 
   const tasksQuery = useTasks();
@@ -101,8 +99,7 @@ export function UpcomingRoute() {
   const updateMutation = useUpdateTask();
 
   // Delay-based activation lets a plain tap (e.g. the edit/delete buttons)
-  // pass through normally — a drag only starts after a brief hold, which also
-  // keeps this from fighting with the day strip's horizontal scroll.
+  // pass through normally — a drag only starts after a brief hold.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
@@ -120,11 +117,26 @@ export function UpcomingRoute() {
     return map;
   }, [tasksQuery.data]);
 
+  // Switching weeks almost always leaves the previously-selected date
+  // outside the newly-shown week, so it's re-picked here: today if the new
+  // week actually contains it (jumping back to "this week"), otherwise the
+  // new week's Monday.
+  const goToWeek = (offset: number) => {
+    setWeekOffset(offset);
+    const newDays = buildWeekDays(offset);
+    const todayKey = formatJst(new Date(), 'yyyy-MM-dd');
+    const containsToday = newDays.some((d) => formatJst(d, 'yyyy-MM-dd') === todayKey);
+    setSelectedKey(containsToday ? todayKey : formatJst(newDays[0]!, 'yyyy-MM-dd'));
+  };
+
   const selectedTasks = tasksByDay.get(selectedKey) ?? [];
   const totalMinutes = sumEstimateMinutes(selectedTasks);
   const selectedPct = Math.round((totalMinutes / DAILY_CAPACITY_MINUTES) * 100);
   const selectedDate = days.find((d) => formatJst(d, 'yyyy-MM-dd') === selectedKey) ?? days[0]!;
-  const selectedLabel = `${formatJst(selectedDate, 'M月d日')}（${WEEKDAY_JA[selectedDate.getDay()]}）`;
+  const selectedLabel = `${formatJst(selectedDate, 'M月d日')}（${WEEKDAY_JA[jstIsoDayOfWeek(selectedDate) % 7]}）`;
+  const weekStart = days[0]!;
+  const weekEnd = days[6]!;
+  const weekRangeLabel = `${formatJst(weekStart, 'M/d')}〜${formatJst(weekEnd, 'M/d')}`;
 
   const handleDragStart = (event: DragStartEvent) => {
     const task = event.active.data.current?.task as Task | undefined;
@@ -183,7 +195,33 @@ export function UpcomingRoute() {
           予定
         </h2>
 
-        <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            aria-label="前週へ"
+            onClick={() => goToWeek(weekOffset - 1)}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => goToWeek(0)}
+            className="text-xs font-medium text-foreground hover:text-primary"
+          >
+            {weekOffset === 0 ? `今週（${weekRangeLabel}）` : weekRangeLabel}
+          </button>
+          <button
+            type="button"
+            aria-label="次週へ"
+            onClick={() => goToWeek(weekOffset + 1)}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex gap-1.5">
           {days.map((d) => {
             const key = formatJst(d, 'yyyy-MM-dd');
             const dayMinutes = sumEstimateMinutes(tasksByDay.get(key));
