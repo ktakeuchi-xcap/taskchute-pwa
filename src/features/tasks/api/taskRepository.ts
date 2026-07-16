@@ -13,6 +13,7 @@ import { deriveMeetingTaskStatus } from '@/features/tasks/meetingStatus';
 import { buildHeaderIndex, TASKDB_HEADERS, TASKDB_SHEET, SETTINGS_SHEET } from './headers';
 import { upsertMeetingCategoryRule, upsertMeetingWorkloadRule } from './meetingCategoryRules';
 import { buildTaskRow, formatEventTitle, parseTaskDbRows, type TaskWithRow } from './serializers';
+import { acquireSyncLockOrWait, releaseSyncLock } from '@/features/sync/syncLock';
 
 // Looked up leniently (not via buildHeaderIndex/TASKDB_HEADERS), same as
 // Source/RecurringEventID in serializers.ts — a sheet that hasn't added this
@@ -106,6 +107,19 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
     return { headerRow, tasksWithRow: parseTaskDbRows(values) };
   }
 
+  // Holds the same lock a sync run holds for its whole read-then-write span
+  // (see acquireSyncLockOrWait's doc comment) — rules out a concurrent sync
+  // shifting row numbers out from under a mutation that read them earlier in
+  // the same call.
+  async function withSyncLock<T>(fn: () => Promise<T>): Promise<T> {
+    await acquireSyncLockOrWait(sheets, spreadsheetId);
+    try {
+      return await fn();
+    } finally {
+      await releaseSyncLock(sheets, spreadsheetId).catch(() => {});
+    }
+  }
+
   return {
     async listTasks() {
       const values = await sheets.getValues(spreadsheetId, TASKDB_SHEET);
@@ -194,241 +208,253 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
     },
 
     async updateTask(taskId, input) {
-      const { headerRow, tasksWithRow } = await loadAll();
-      const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
-      const target = tasksWithRow.find((t) => t.task.taskId === taskId);
-      if (!target) throw new Error(`Task not found: ${taskId}`);
-      assertNotMeeting(target.task, 'edited');
+      return withSyncLock(async () => {
+        const { headerRow, tasksWithRow } = await loadAll();
+        const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
+        const target = tasksWithRow.find((t) => t.task.taskId === taskId);
+        if (!target) throw new Error(`Task not found: ${taskId}`);
+        assertNotMeeting(target.task, 'edited');
 
-      const startTime = input.startTime ?? target.task.scheduledStartTime;
-      const endTime = new Date(startTime.getTime() + input.estimateMinutes * 60_000);
-      const category = input.category ?? null;
-      const countsTowardWorkload = input.countsTowardWorkload ?? target.task.countsTowardWorkload;
+        const startTime = input.startTime ?? target.task.scheduledStartTime;
+        const endTime = new Date(startTime.getTime() + input.estimateMinutes * 60_000);
+        const category = input.category ?? null;
+        const countsTowardWorkload = input.countsTowardWorkload ?? target.task.countsTowardWorkload;
 
-      const updates: ValueRange[] = [
-        {
-          range: cellAddress(target.rowNumber, idx.TaskName + 1),
-          values: [[input.taskName]],
-        },
-        {
-          range: cellAddress(target.rowNumber, idx.Category + 1),
-          values: [[category ?? '']],
-        },
-        {
-          range: cellAddress(target.rowNumber, idx.EstimateMinutes + 1),
-          values: [[input.estimateMinutes]],
-        },
-        {
-          range: cellAddress(target.rowNumber, idx.ScheduledStartTime + 1),
-          values: [[formatDateForSheet(startTime)]],
-        },
-        {
-          range: cellAddress(target.rowNumber, idx.ScheduledEndTime + 1),
-          values: [[formatDateForSheet(endTime)]],
-        },
-      ];
-      const countsCol = findColumn(headerRow, COUNTS_TOWARD_WORKLOAD_HEADER);
-      if (countsCol !== -1) {
-        updates.push({
-          range: cellAddress(target.rowNumber, countsCol + 1),
-          values: [[countsTowardWorkload ? '' : 'FALSE']],
-        });
-      }
-      await sheets.batchUpdateValues(spreadsheetId, updates);
+        const updates: ValueRange[] = [
+          {
+            range: cellAddress(target.rowNumber, idx.TaskName + 1),
+            values: [[input.taskName]],
+          },
+          {
+            range: cellAddress(target.rowNumber, idx.Category + 1),
+            values: [[category ?? '']],
+          },
+          {
+            range: cellAddress(target.rowNumber, idx.EstimateMinutes + 1),
+            values: [[input.estimateMinutes]],
+          },
+          {
+            range: cellAddress(target.rowNumber, idx.ScheduledStartTime + 1),
+            values: [[formatDateForSheet(startTime)]],
+          },
+          {
+            range: cellAddress(target.rowNumber, idx.ScheduledEndTime + 1),
+            values: [[formatDateForSheet(endTime)]],
+          },
+        ];
+        const countsCol = findColumn(headerRow, COUNTS_TOWARD_WORKLOAD_HEADER);
+        if (countsCol !== -1) {
+          updates.push({
+            range: cellAddress(target.rowNumber, countsCol + 1),
+            values: [[countsTowardWorkload ? '' : 'FALSE']],
+          });
+        }
+        await sheets.batchUpdateValues(spreadsheetId, updates);
 
-      if (target.task.calendarEventId) {
-        await calendar.patch(calendarId, target.task.calendarEventId, {
-          summary: formatEventTitle(input.taskName, category),
-          start: startTime,
-          end: endTime,
-        });
-      }
+        if (target.task.calendarEventId) {
+          await calendar.patch(calendarId, target.task.calendarEventId, {
+            summary: formatEventTitle(input.taskName, category),
+            start: startTime,
+            end: endTime,
+          });
+        }
 
-      return {
-        ...target.task,
-        taskName: input.taskName,
-        category,
-        estimateMinutes: input.estimateMinutes,
-        scheduledStartTime: startTime,
-        scheduledEndTime: endTime,
-        countsTowardWorkload,
-      };
+        return {
+          ...target.task,
+          taskName: input.taskName,
+          category,
+          estimateMinutes: input.estimateMinutes,
+          scheduledStartTime: startTime,
+          scheduledEndTime: endTime,
+          countsTowardWorkload,
+        };
+      });
     },
 
     async startTask(taskId) {
-      const { headerRow, tasksWithRow } = await loadAll();
-      const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
-      const target = tasksWithRow.find((t) => t.task.taskId === taskId);
-      if (!target) throw new Error(`Task not found: ${taskId}`);
-      assertNotMeeting(target.task, 'started');
+      return withSyncLock(async () => {
+        const { headerRow, tasksWithRow } = await loadAll();
+        const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
+        const target = tasksWithRow.find((t) => t.task.taskId === taskId);
+        if (!target) throw new Error(`Task not found: ${taskId}`);
+        assertNotMeeting(target.task, 'started');
 
-      const startedAt = now();
-      const updates: ValueRange[] = [
-        {
-          range: cellAddress(target.rowNumber, idx.Status + 1),
-          values: [[TaskStatus.InProgress]],
-        },
-        {
-          range: cellAddress(target.rowNumber, idx.ActualStartTime + 1),
-          values: [[formatDateForSheet(startedAt)]],
-        },
-      ];
-      await sheets.batchUpdateValues(spreadsheetId, updates);
+        const startedAt = now();
+        const updates: ValueRange[] = [
+          {
+            range: cellAddress(target.rowNumber, idx.Status + 1),
+            values: [[TaskStatus.InProgress]],
+          },
+          {
+            range: cellAddress(target.rowNumber, idx.ActualStartTime + 1),
+            values: [[formatDateForSheet(startedAt)]],
+          },
+        ];
+        await sheets.batchUpdateValues(spreadsheetId, updates);
 
-      if (target.task.calendarEventId) {
-        await calendar.patch(calendarId, target.task.calendarEventId, {
-          colorId: CalendarColor.Yellow,
-        });
-      }
-      return {
-        ...target.task,
-        status: TaskStatus.InProgress,
-        actualStartTime: startedAt,
-      };
+        if (target.task.calendarEventId) {
+          await calendar.patch(calendarId, target.task.calendarEventId, {
+            colorId: CalendarColor.Yellow,
+          });
+        }
+        return {
+          ...target.task,
+          status: TaskStatus.InProgress,
+          actualStartTime: startedAt,
+        };
+      });
     },
 
     async endTask(taskId) {
-      const { headerRow, tasksWithRow } = await loadAll();
-      const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
-      const target = tasksWithRow.find((t) => t.task.taskId === taskId);
-      if (!target) throw new Error(`Task not found: ${taskId}`);
-      assertNotMeeting(target.task, 'ended');
+      return withSyncLock(async () => {
+        const { headerRow, tasksWithRow } = await loadAll();
+        const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
+        const target = tasksWithRow.find((t) => t.task.taskId === taskId);
+        if (!target) throw new Error(`Task not found: ${taskId}`);
+        assertNotMeeting(target.task, 'ended');
 
-      const endedAt = now();
-      const updates: ValueRange[] = [
-        {
-          range: cellAddress(target.rowNumber, idx.Status + 1),
-          values: [[TaskStatus.Done]],
-        },
-        {
-          range: cellAddress(target.rowNumber, idx.ActualEndTime + 1),
-          values: [[formatDateForSheet(endedAt)]],
-        },
-      ];
-      await sheets.batchUpdateValues(spreadsheetId, updates);
+        const endedAt = now();
+        const updates: ValueRange[] = [
+          {
+            range: cellAddress(target.rowNumber, idx.Status + 1),
+            values: [[TaskStatus.Done]],
+          },
+          {
+            range: cellAddress(target.rowNumber, idx.ActualEndTime + 1),
+            values: [[formatDateForSheet(endedAt)]],
+          },
+        ];
+        await sheets.batchUpdateValues(spreadsheetId, updates);
 
-      if (target.task.calendarEventId) {
-        const startTime = target.task.actualStartTime ?? target.task.scheduledStartTime;
-        await calendar.patch(calendarId, target.task.calendarEventId, {
-          colorId: CalendarColor.Green,
-          start: startTime,
-          end: endedAt,
-        });
-      }
-      return {
-        ...target.task,
-        status: TaskStatus.Done,
-        actualEndTime: endedAt,
-      };
+        if (target.task.calendarEventId) {
+          const startTime = target.task.actualStartTime ?? target.task.scheduledStartTime;
+          await calendar.patch(calendarId, target.task.calendarEventId, {
+            colorId: CalendarColor.Green,
+            start: startTime,
+            end: endedAt,
+          });
+        }
+        return {
+          ...target.task,
+          status: TaskStatus.Done,
+          actualEndTime: endedAt,
+        };
+      });
     },
 
     async deleteTask(taskId) {
-      const { tasksWithRow } = await loadAll();
-      const target = tasksWithRow.find((t) => t.task.taskId === taskId);
-      if (!target) throw new Error(`Task not found: ${taskId}`);
-      assertNotMeeting(target.task, 'deleted');
+      return withSyncLock(async () => {
+        const { tasksWithRow } = await loadAll();
+        const target = tasksWithRow.find((t) => t.task.taskId === taskId);
+        if (!target) throw new Error(`Task not found: ${taskId}`);
+        assertNotMeeting(target.task, 'deleted');
 
-      const sheetsMeta = await sheets.getSheetMetadata(spreadsheetId);
-      const taskDbSheet = sheetsMeta.find((s) => s.title === TASKDB_SHEET);
-      if (!taskDbSheet) throw new Error(`Sheet not found: ${TASKDB_SHEET}`);
+        const sheetsMeta = await sheets.getSheetMetadata(spreadsheetId);
+        const taskDbSheet = sheetsMeta.find((s) => s.title === TASKDB_SHEET);
+        if (!taskDbSheet) throw new Error(`Sheet not found: ${TASKDB_SHEET}`);
 
-      if (target.task.calendarEventId) {
-        await calendar.delete(calendarId, target.task.calendarEventId);
-      }
-      await sheets.deleteRow(spreadsheetId, taskDbSheet.sheetId, target.rowNumber - 1);
+        if (target.task.calendarEventId) {
+          await calendar.delete(calendarId, target.task.calendarEventId);
+        }
+        await sheets.deleteRow(spreadsheetId, taskDbSheet.sheetId, target.rowNumber - 1);
+      });
     },
 
     async setMeetingCategory(taskId, category, scope) {
-      const { headerRow, tasksWithRow } = await loadAll();
-      const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
-      const target = tasksWithRow.find((t) => t.task.taskId === taskId);
-      if (!target) throw new Error(`Task not found: ${taskId}`);
-      if (target.task.source !== TaskSource.Meeting) {
-        throw new Error(`Task "${target.task.taskName}" is not a meeting task`);
-      }
-
-      const updates: ValueRange[] = [
-        { range: cellAddress(target.rowNumber, idx.Category + 1), values: [[category ?? '']] },
-      ];
-
-      if (scope !== MeetingCategoryScope.This) {
-        const seriesId = target.task.recurringEventId;
-        if (!seriesId) {
-          throw new Error(`Meeting task "${target.task.taskName}" has no recurring series id`);
+      return withSyncLock(async () => {
+        const { headerRow, tasksWithRow } = await loadAll();
+        const idx = buildHeaderIndex(headerRow, TASKDB_HEADERS);
+        const target = tasksWithRow.find((t) => t.task.taskId === taskId);
+        if (!target) throw new Error(`Task not found: ${taskId}`);
+        if (target.task.source !== TaskSource.Meeting) {
+          throw new Error(`Task "${target.task.taskName}" is not a meeting task`);
         }
-        const others = tasksWithRow.filter(
-          (t) =>
-            t.rowNumber !== target.rowNumber &&
-            t.task.source === TaskSource.Meeting &&
-            t.task.recurringEventId === seriesId &&
-            (scope === MeetingCategoryScope.All ||
-              t.task.scheduledStartTime.getTime() >= target.task.scheduledStartTime.getTime()),
-        );
-        for (const other of others) {
-          updates.push({
-            range: cellAddress(other.rowNumber, idx.Category + 1),
-            values: [[category ?? '']],
+
+        const updates: ValueRange[] = [
+          { range: cellAddress(target.rowNumber, idx.Category + 1), values: [[category ?? '']] },
+        ];
+
+        if (scope !== MeetingCategoryScope.This) {
+          const seriesId = target.task.recurringEventId;
+          if (!seriesId) {
+            throw new Error(`Meeting task "${target.task.taskName}" has no recurring series id`);
+          }
+          const others = tasksWithRow.filter(
+            (t) =>
+              t.rowNumber !== target.rowNumber &&
+              t.task.source === TaskSource.Meeting &&
+              t.task.recurringEventId === seriesId &&
+              (scope === MeetingCategoryScope.All ||
+                t.task.scheduledStartTime.getTime() >= target.task.scheduledStartTime.getTime()),
+          );
+          for (const other of others) {
+            updates.push({
+              range: cellAddress(other.rowNumber, idx.Category + 1),
+              values: [[category ?? '']],
+            });
+          }
+          await upsertMeetingCategoryRule(sheets, spreadsheetId, {
+            recurringEventId: seriesId,
+            category,
+            effectiveFromDate:
+              scope === MeetingCategoryScope.All ? null : target.task.scheduledStartTime,
           });
         }
-        await upsertMeetingCategoryRule(sheets, spreadsheetId, {
-          recurringEventId: seriesId,
-          category,
-          effectiveFromDate:
-            scope === MeetingCategoryScope.All ? null : target.task.scheduledStartTime,
-        });
-      }
 
-      await sheets.batchUpdateValues(spreadsheetId, updates);
+        await sheets.batchUpdateValues(spreadsheetId, updates);
 
-      return { ...target.task, category };
+        return { ...target.task, category };
+      });
     },
 
     async setCountsTowardWorkload(taskId, counts, scope) {
-      const { headerRow, tasksWithRow } = await loadAll();
-      const target = tasksWithRow.find((t) => t.task.taskId === taskId);
-      if (!target) throw new Error(`Task not found: ${taskId}`);
-      if (target.task.source !== TaskSource.Meeting) {
-        throw new Error(`Task "${target.task.taskName}" is not a meeting task`);
-      }
-      const countsCol = findColumn(headerRow, COUNTS_TOWARD_WORKLOAD_HEADER);
-      if (countsCol === -1) {
-        throw new Error(
-          `"${TASKDB_SHEET}" シートに "${COUNTS_TOWARD_WORKLOAD_HEADER}" の見出し列を追加してください`,
-        );
-      }
-
-      const value = counts ? '' : 'FALSE';
-      const updates: ValueRange[] = [
-        { range: cellAddress(target.rowNumber, countsCol + 1), values: [[value]] },
-      ];
-
-      if (scope !== MeetingCategoryScope.This) {
-        const seriesId = target.task.recurringEventId;
-        if (!seriesId) {
-          throw new Error(`Meeting task "${target.task.taskName}" has no recurring series id`);
+      return withSyncLock(async () => {
+        const { headerRow, tasksWithRow } = await loadAll();
+        const target = tasksWithRow.find((t) => t.task.taskId === taskId);
+        if (!target) throw new Error(`Task not found: ${taskId}`);
+        if (target.task.source !== TaskSource.Meeting) {
+          throw new Error(`Task "${target.task.taskName}" is not a meeting task`);
         }
-        const others = tasksWithRow.filter(
-          (t) =>
-            t.rowNumber !== target.rowNumber &&
-            t.task.source === TaskSource.Meeting &&
-            t.task.recurringEventId === seriesId &&
-            (scope === MeetingCategoryScope.All ||
-              t.task.scheduledStartTime.getTime() >= target.task.scheduledStartTime.getTime()),
-        );
-        for (const other of others) {
-          updates.push({ range: cellAddress(other.rowNumber, countsCol + 1), values: [[value]] });
+        const countsCol = findColumn(headerRow, COUNTS_TOWARD_WORKLOAD_HEADER);
+        if (countsCol === -1) {
+          throw new Error(
+            `"${TASKDB_SHEET}" シートに "${COUNTS_TOWARD_WORKLOAD_HEADER}" の見出し列を追加してください`,
+          );
         }
-        await upsertMeetingWorkloadRule(sheets, spreadsheetId, {
-          recurringEventId: seriesId,
-          countsTowardWorkload: counts,
-          effectiveFromDate:
-            scope === MeetingCategoryScope.All ? null : target.task.scheduledStartTime,
-        });
-      }
 
-      await sheets.batchUpdateValues(spreadsheetId, updates);
+        const value = counts ? '' : 'FALSE';
+        const updates: ValueRange[] = [
+          { range: cellAddress(target.rowNumber, countsCol + 1), values: [[value]] },
+        ];
 
-      return { ...target.task, countsTowardWorkload: counts };
+        if (scope !== MeetingCategoryScope.This) {
+          const seriesId = target.task.recurringEventId;
+          if (!seriesId) {
+            throw new Error(`Meeting task "${target.task.taskName}" has no recurring series id`);
+          }
+          const others = tasksWithRow.filter(
+            (t) =>
+              t.rowNumber !== target.rowNumber &&
+              t.task.source === TaskSource.Meeting &&
+              t.task.recurringEventId === seriesId &&
+              (scope === MeetingCategoryScope.All ||
+                t.task.scheduledStartTime.getTime() >= target.task.scheduledStartTime.getTime()),
+          );
+          for (const other of others) {
+            updates.push({ range: cellAddress(other.rowNumber, countsCol + 1), values: [[value]] });
+          }
+          await upsertMeetingWorkloadRule(sheets, spreadsheetId, {
+            recurringEventId: seriesId,
+            countsTowardWorkload: counts,
+            effectiveFromDate:
+              scope === MeetingCategoryScope.All ? null : target.task.scheduledStartTime,
+          });
+        }
+
+        await sheets.batchUpdateValues(spreadsheetId, updates);
+
+        return { ...target.task, countsTowardWorkload: counts };
+      });
     },
   };
 }

@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createTaskRepository } from './taskRepository';
 import { TASKDB_HEADERS } from './headers';
 import { TaskStatus } from '@/features/tasks/types';
-import { dateToSheetSerial } from '@/lib/google/sheetDate';
+import { dateToSheetSerial, formatDateForSheet } from '@/lib/google/sheetDate';
 import type { SheetsClient, ValueRange } from '@/lib/google/sheets';
 import type { CalendarClient, CalendarEvent } from '@/lib/google/calendar';
 
@@ -35,12 +35,14 @@ function createMockSheets(state: SheetState): SheetsClient & {
   const batchUpdates: ValueRange[][] = [];
   const deletedRows: Array<{ sheetId: number; rowIndex: number }> = [];
   const updateCalls: Array<{ range: string; values: unknown[][] }> = [];
+  let lockCell: unknown = '';
   return {
     appendCalls,
     batchUpdates,
     deletedRows,
     updateCalls,
     async getValues(_id, range) {
+      if (range === 'Settings!Z1') return [[lockCell]];
       if (range.startsWith('TaskDB')) return state.TaskDB;
       if (range.startsWith('MeetingCategoryRules')) return state.MeetingCategoryRules ?? [];
       if (range === 'Settings!A:A') return state.Settings;
@@ -62,6 +64,7 @@ function createMockSheets(state: SheetState): SheetsClient & {
     },
     async updateRange(_id, range, values) {
       updateCalls.push({ range, values });
+      if (range === 'Settings!Z1') lockCell = values[0]?.[0];
     },
     async batchUpdateValues(_id, data) {
       batchUpdates.push(data);
@@ -1033,6 +1036,79 @@ describe('TaskRepository', () => {
       await expect(repo.setCountsTowardWorkload('tid-m', false, 'this')).rejects.toThrowError(
         /CountsTowardWorkload/,
       );
+    });
+  });
+
+  describe('sync lock integration (ISS-20)', () => {
+    function singleTaskSheets() {
+      const start = new Date('2026-05-19T09:00:00+09:00');
+      const end = new Date('2026-05-19T09:30:00+09:00');
+      return createMockSheets({
+        TaskDB: [
+          HEADER,
+          [
+            'tid-a',
+            'A',
+            '',
+            30,
+            dateToSheetSerial(start),
+            dateToSheetSerial(end),
+            '',
+            '',
+            'Not Started',
+            'evt-a',
+          ],
+        ],
+        Settings: [],
+      });
+    }
+
+    it('acquires and releases the sync lock around a row-based write', async () => {
+      const sheets = singleTaskSheets();
+      const repo = createTaskRepository({
+        sheets,
+        calendar: createMockCalendar(),
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+      });
+
+      await repo.startTask('tid-a');
+
+      const lockUpdates = sheets.updateCalls.filter((u) => u.range === 'Settings!Z1');
+      expect(lockUpdates).toHaveLength(2);
+      expect(lockUpdates[0]!.values[0]![0]).not.toBe('');
+      expect(lockUpdates[1]!.values[0]![0]).toBe('');
+    });
+
+    it('waits for a held lock to expire before writing, instead of racing or failing outright', async () => {
+      vi.useFakeTimers();
+      try {
+        const fixedNow = new Date('2026-05-19T10:00:00+09:00');
+        vi.setSystemTime(fixedNow);
+
+        const sheets = singleTaskSheets();
+        // Simulate another device already holding the lock as of "now".
+        await sheets.updateRange('sid', 'Settings!Z1', [[formatDateForSheet(fixedNow)]]);
+        sheets.updateCalls.length = 0;
+
+        const repo = createTaskRepository({
+          sheets,
+          calendar: createMockCalendar(),
+          spreadsheetId: 'sid',
+          calendarId: 'cid',
+          now: () => fixedNow,
+        });
+
+        const promise = repo.startTask('tid-a');
+        // Past LOCK_TTL_MS (20s) — the held lock is now stale and the poll
+        // loop should succeed on its next attempt instead of giving up.
+        await vi.advanceTimersByTimeAsync(25_000);
+        const updated = await promise;
+
+        expect(updated.status).toBe(TaskStatus.InProgress);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
