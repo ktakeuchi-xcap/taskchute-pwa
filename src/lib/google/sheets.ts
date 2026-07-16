@@ -51,8 +51,20 @@ export function createSheetsClient(auth: AuthClient): SheetsClient {
     },
 
     async appendRows(spreadsheetId, range, rows) {
+      // A bare sheet name (no "!") leaves it to Google's own "find the
+      // table" heuristic to guess which column the data starts at, based on
+      // the sheet's actual content — and that guess can drift over repeated
+      // calls (confirmed in production: appends landing progressively
+      // further right each sync cycle — e.g. columns M, then U, then AC,
+      // each +8 further — instead of staying at column A, once optional
+      // trailing columns like CountsTowardWorkload had inconsistent/sparse
+      // data confusing the detection). Anchoring at column A removes the
+      // ambiguity outright: the table always starts there, so appends
+      // always land at A regardless of what the rest of the sheet looks
+      // like.
+      const anchoredRange = range.includes('!') ? range : `${range}!A1`;
       const url =
-        `${BASE}/${spreadsheetId}/values/${encodeRange(range)}:append` +
+        `${BASE}/${spreadsheetId}/values/${encodeRange(anchoredRange)}:append` +
         `?valueInputOption=${VALUE_INPUT}&insertDataOption=INSERT_ROWS`;
       await gfetch(auth, url, { method: 'POST', json: { values: rows } });
     },

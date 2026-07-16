@@ -56,3 +56,35 @@ describe('createSheetsClient.deleteRows', () => {
     expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled();
   });
 });
+
+describe('createSheetsClient.appendRows', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('anchors a bare sheet name at column A instead of letting Google guess where the table starts', async () => {
+    // A bare sheet name for values.append lets Google's own "find the table"
+    // heuristic pick the starting column from sheet content — confirmed in
+    // production to drift over repeated calls (appends landing progressively
+    // further right instead of at column A). Anchoring removes the ambiguity.
+    const client = createSheetsClient(fakeClient());
+    await client.appendRows('sid', 'TaskDB', [['a', 'b']]);
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url] = fetchMock.mock.calls[0]!;
+    expect(url).toContain(encodeURIComponent('TaskDB!A1') + ':append');
+  });
+
+  it('leaves an already-qualified range (containing "!") untouched', async () => {
+    const client = createSheetsClient(fakeClient());
+    await client.appendRows('sid', 'TaskDB!B2', [['a', 'b']]);
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const [url] = fetchMock.mock.calls[0]!;
+    expect(url).toContain(encodeURIComponent('TaskDB!B2') + ':append');
+  });
+});
