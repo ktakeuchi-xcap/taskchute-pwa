@@ -147,6 +147,21 @@ describe('listMeetingWorkloadRules', () => {
     ]);
   });
 
+  it('parses a real boolean false/true (Sheets checkbox cell), not just the string FALSE', async () => {
+    // getValues uses valueRenderOption=UNFORMATTED_VALUE, so a Sheets
+    // checkbox-formatted cell comes back as a JS boolean, not "FALSE"/"TRUE".
+    const sheets = mockSheets([
+      HEADER_WITH_WORKLOAD,
+      ['series-a', '', '', false, ''],
+      ['series-b', '', '', true, ''],
+    ]);
+    const rules = await listMeetingWorkloadRules(sheets, 'sid');
+    expect(rules).toEqual([
+      { recurringEventId: 'series-a', countsTowardWorkload: false, effectiveFromDate: null },
+      { recurringEventId: 'series-b', countsTowardWorkload: true, effectiveFromDate: null },
+    ]);
+  });
+
   it('parses a set WorkloadEffectiveFromDate', async () => {
     const from = new Date('2026-07-09T00:00:00+09:00');
     const sheets = mockSheets([

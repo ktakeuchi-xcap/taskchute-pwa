@@ -39,6 +39,17 @@ function asNumber(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+// getValues reads with valueRenderOption=UNFORMATTED_VALUE, so a cell that
+// was checked/unchecked as a Sheets checkbox comes back as a real JS boolean
+// (`false`), not the string "FALSE" — String(false) is lowercase "false",
+// which `asString(value) !== 'FALSE'` would never match, silently treating
+// an unchecked box as "counts toward workload". This checks the boolean case
+// directly instead of round-tripping it through asString's String(value).
+function isFalseFlag(value: unknown): boolean {
+  if (typeof value === 'boolean') return value === false;
+  return asString(value).trim().toUpperCase() === 'FALSE';
+}
+
 function asStatus(value: unknown): TaskStatus {
   const s = asString(value);
   if (STATUS_VALUES.has(s)) return s as TaskStatus;
@@ -93,9 +104,7 @@ export function parseTaskDbRows(values: unknown[][]): TaskWithRow[] {
         // Missing column or blank cell both default to true (計上する) — an
         // explicit "FALSE" is the only way to opt a task out.
         countsTowardWorkload:
-          countsTowardWorkloadCol === -1
-            ? true
-            : asString(row[countsTowardWorkloadCol]) !== 'FALSE',
+          countsTowardWorkloadCol === -1 ? true : !isFalseFlag(row[countsTowardWorkloadCol]),
       },
     });
   });

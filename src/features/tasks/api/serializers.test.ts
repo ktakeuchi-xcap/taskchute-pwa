@@ -141,6 +141,36 @@ describe('parseTaskDbRows', () => {
     const [parsed] = parseTaskDbRows([headerWithCol, row]);
     expect(parsed!.task.countsTowardWorkload).toBe(false);
   });
+
+  it('reads countsTowardWorkload as false for a real boolean false (Sheets checkbox cell)', () => {
+    // getValues uses valueRenderOption=UNFORMATTED_VALUE, so a cell checked
+    // via Sheets' checkbox feature comes back as the JS boolean `false`, not
+    // the string "FALSE" — this was silently read as "counts toward
+    // workload" (ISS-?) since String(false) is lowercase "false".
+    const start = new Date('2026-05-19T10:00:00+09:00');
+    const end = new Date('2026-05-19T10:30:00+09:00');
+    const headerWithCol = [...HEADER, 'CountsTowardWorkload'];
+    const rowData: Record<string, unknown> = {
+      ...makeBaseRowData(start, end),
+      CountsTowardWorkload: false,
+    };
+    const row = headerWithCol.map((h) => rowData[h]);
+    const [parsed] = parseTaskDbRows([headerWithCol, row]);
+    expect(parsed!.task.countsTowardWorkload).toBe(false);
+  });
+
+  it('reads countsTowardWorkload as true for a real boolean true (Sheets checkbox cell)', () => {
+    const start = new Date('2026-05-19T10:00:00+09:00');
+    const end = new Date('2026-05-19T10:30:00+09:00');
+    const headerWithCol = [...HEADER, 'CountsTowardWorkload'];
+    const rowData: Record<string, unknown> = {
+      ...makeBaseRowData(start, end),
+      CountsTowardWorkload: true,
+    };
+    const row = headerWithCol.map((h) => rowData[h]);
+    const [parsed] = parseTaskDbRows([headerWithCol, row]);
+    expect(parsed!.task.countsTowardWorkload).toBe(true);
+  });
 });
 
 describe('buildTaskRow', () => {

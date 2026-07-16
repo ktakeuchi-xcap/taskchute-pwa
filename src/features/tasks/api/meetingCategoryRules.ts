@@ -43,6 +43,15 @@ function asString(value: unknown): string {
   return typeof value === 'string' ? value : String(value);
 }
 
+// See the identical helper in serializers.ts: getValues reads with
+// valueRenderOption=UNFORMATTED_VALUE, so a Sheets checkbox cell comes back
+// as a real JS boolean — String(false) is lowercase "false", which would
+// never match a plain `!== 'FALSE'` string comparison.
+function isFalseFlag(value: unknown): boolean {
+  if (typeof value === 'boolean') return value === false;
+  return asString(value).trim().toUpperCase() === 'FALSE';
+}
+
 function findColumn(headerRow: unknown[], header: string): number {
   return headerRow.findIndex((cell) => cell === header);
 }
@@ -89,7 +98,7 @@ function parseWorkloadRulesFromValues(values: unknown[][]): MeetingWorkloadRule[
     .slice(1)
     .map((row) => ({
       recurringEventId: asString(row[idx.RecurringEventID]),
-      countsTowardWorkload: asString(row[countsCol]) !== 'FALSE',
+      countsTowardWorkload: !isFalseFlag(row[countsCol]),
       effectiveFromDate: effCol === -1 ? null : parseSheetDateCell(row[effCol]),
     }))
     .filter((r) => r.recurringEventId.length > 0);
