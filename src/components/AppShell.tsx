@@ -5,6 +5,30 @@ import { useUIStore, type Tab } from '@/store/uiStore';
 import { formatJst, WEEKDAY_JA } from '@/lib/time/jst';
 import { useAutoSync } from '@/features/sync/useAutoSync';
 import type { SyncSummary } from '@/features/sync/useSync';
+import { GoogleApiError } from '@/lib/google/errors';
+
+/**
+ * GoogleApiError's own `.message` is just "Google API {status} at {url}" —
+ * it never included *why* (Google's response body, e.g. "Invalid value at
+ * 'data.values[12][3]'..."), which was the missing piece that made a real
+ * 400 on TaskDB:append (ISS-24's remaining mystery) show up as an
+ * uninformative error with no way to tell what Google actually objected to.
+ */
+function formatSyncError(err: unknown): string {
+  if (err instanceof GoogleApiError) {
+    const body = err.body;
+    const detail =
+      typeof body === 'string'
+        ? body
+        : body && typeof body === 'object' && 'error' in body
+          ? ((body as { error?: { message?: string } }).error?.message ?? JSON.stringify(body))
+          : body
+            ? JSON.stringify(body)
+            : null;
+    return `同期失敗: ${err.message}${detail ? ` — ${detail}` : ''}`;
+  }
+  return `同期失敗: ${err instanceof Error ? err.message : String(err)}`;
+}
 
 function formatSyncSuccess(result: SyncSummary): string {
   return (
@@ -47,9 +71,7 @@ export function AppShell({ children }: AppShellProps) {
   // the shared mutation's own error state (rather than only setting it from
   // this component's own try/catch below) surfaces a failure regardless of
   // which trigger — button or background timer — caused it.
-  const errorMessage = sync.isError
-    ? `同期失敗: ${sync.error instanceof Error ? sync.error.message : sync.error}`
-    : null;
+  const errorMessage = sync.isError ? formatSyncError(sync.error) : null;
   // Persists (doesn't auto-clear like syncMessage) until a later sync
   // completes without tripping the safety net again — this should be rare
   // and always warrants a look, not a 3-second flash (see
@@ -59,6 +81,7 @@ export function AppShell({ children }: AppShellProps) {
       ? `⚠️ 削除件数が異常に多かったため同期の削除処理をスキップしました（${sync.data.deletionsSkippedForSafety}件）。開発者に確認してください`
       : null;
   const displayMessage = safetyWarning ?? syncMessage ?? errorMessage;
+  const isProblem = !!safetyWarning || (!syncMessage && !!errorMessage);
 
   const runSync = async () => {
     setSyncMessage(null);
@@ -101,7 +124,7 @@ export function AppShell({ children }: AppShellProps) {
           <div
             className={cn(
               'border-b px-4 py-1.5 text-[11px]',
-              safetyWarning
+              isProblem
                 ? 'border-destructive/40 bg-destructive/10 font-medium text-destructive'
                 : 'border-border bg-muted/60 text-muted-foreground',
             )}
