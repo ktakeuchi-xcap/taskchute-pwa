@@ -42,7 +42,7 @@ export function CurrentTaskCard({ task, onEnd, isPending }: CurrentTaskCardProps
         <TaskTimer startedAt={startedAt} estimateMinutes={task.estimateMinutes} />
       </div>
       <Button variant="destructive" className="mt-4 w-full" onClick={onEnd} disabled={isPending}>
-        ■ 現在を終了
+        ■ 現在のタスクを終了
       </Button>
     </Card>
   );
