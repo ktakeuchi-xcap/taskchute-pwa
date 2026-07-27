@@ -97,19 +97,6 @@ export function TodayRoute() {
   );
   const routineWeekLabel = `${weekOffsetLabel(routineWeekOffset)}（${formatJst(routineWeekMonday, 'M/d')}〜${formatJst(addDays(routineWeekMonday, 4), 'M/d')}）`;
 
-  // A task next up is already shown in full in the NextTaskCard spotlight
-  // above, so repeating it in the plain list below is just noise — drop it
-  // there. A meeting next up stays in the list: NextMeetingCard doesn't
-  // replace its row (no start/end actions to consolidate), and the list is
-  // still how other today's meetings are found among each other.
-  const listTasks = useMemo(
-    () =>
-      next && next.source !== TaskSource.Meeting
-        ? activeTasks.filter((t) => t.taskId !== next.taskId)
-        : activeTasks,
-    [activeTasks, next],
-  );
-
   const handleGenerateRoutines = async () => {
     setRoutineFeedback(null);
     try {
@@ -174,16 +161,14 @@ export function TodayRoute() {
               本日のタスク一覧
             </h2>
             <TaskList
-              tasks={listTasks}
+              tasks={activeTasks}
               nextTaskId={next?.taskId ?? null}
               onDelete={(taskId) => deleteMutation.mutate(taskId)}
               isDeleting={deleteMutation.isPending}
               emptyMessage={
                 doneTasks.length > 0
                   ? '本日のタスクはすべて完了しました'
-                  : next && next.source !== TaskSource.Meeting
-                    ? '他のタスクはありません'
-                    : '本日のタスクはまだありません'
+                  : '本日のタスクはまだありません'
               }
             />
             {doneTasks.length > 0 ? (

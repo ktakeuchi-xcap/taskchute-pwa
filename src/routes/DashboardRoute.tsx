@@ -10,6 +10,7 @@ import { categoryDotClassName } from '@/features/tasks/categoryColors';
 import { useUIStore } from '@/store/uiStore';
 import { isAllDayMeeting } from '@/features/tasks/meetingStatus';
 import { TaskSource, TaskStatus } from '@/features/tasks/types';
+import { DAILY_CAPACITY_MINUTES } from '@/features/tasks/workload';
 import {
   aggregateDailyTotals,
   aggregateMonthlyByCategory,
@@ -18,9 +19,15 @@ import {
 
 const TREND_DAYS = 14;
 
-function buildTrendDateKeys(): string[] {
+/**
+ * `periodOffset` 0 = the TREND_DAYS days ending today (inclusive, the
+ * original fixed window); each step shifts the whole non-overlapping window
+ * by TREND_DAYS — +1 reaches into the future (all-zero until tasks in that
+ * range are actually done, but still browsable, same as 予定's week nav).
+ */
+function buildTrendDateKeys(periodOffset: number): string[] {
   const today = new Date();
-  const start = addDays(today, -(TREND_DAYS - 1));
+  const start = addDays(today, periodOffset * TREND_DAYS - (TREND_DAYS - 1));
   return Array.from({ length: TREND_DAYS }, (_, i) => formatJst(addDays(start, i), 'yyyy-MM-dd'));
 }
 
@@ -57,6 +64,9 @@ export function DashboardRoute() {
   const yearMonth = `${year}-${String(month0 + 1).padStart(2, '0')}`;
   const monthLabel = `${year}年${month0 + 1}月`;
 
+  const [trendPeriodOffset, setTrendPeriodOffset] = useState(0);
+  const [activeTrendKey, setActiveTrendKey] = useState<string | null>(null);
+
   const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const todayKey = formatJst(new Date(), 'yyyy-MM-dd');
 
@@ -79,8 +89,13 @@ export function DashboardRoute() {
     (w) => w.followUpDate && formatJst(w.followUpDate, 'yyyy-MM-dd') <= todayKey,
   ).length;
 
-  const dailyTotals = useMemo(() => aggregateDailyTotals(tasks, buildTrendDateKeys()), [tasks]);
+  const trendDateKeys = useMemo(() => buildTrendDateKeys(trendPeriodOffset), [trendPeriodOffset]);
+  const dailyTotals = useMemo(
+    () => aggregateDailyTotals(tasks, trendDateKeys),
+    [tasks, trendDateKeys],
+  );
   const maxDailyMinutes = Math.max(1, ...dailyTotals.map((d) => d.minutes));
+  const trendRangeLabel = `${formatJst(new Date(`${trendDateKeys[0]}T00:00:00+09:00`), 'M/d')}〜${formatJst(new Date(`${trendDateKeys[trendDateKeys.length - 1]}T00:00:00+09:00`), 'M/d')}`;
 
   const monthlyTotals = useMemo(
     () => aggregateMonthlyByCategory(tasks, yearMonth),
@@ -163,26 +178,64 @@ export function DashboardRoute() {
 
       {/* 日次稼働推移 */}
       <div className="rounded-lg border border-border bg-card p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          日次稼働推移（過去{TREND_DAYS}日）
-        </h3>
-        <div className="mt-2 flex h-20 items-end gap-1">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            日次稼働推移
+          </h3>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="前の期間"
+              onClick={() => setTrendPeriodOffset((v) => v - 1)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="w-24 text-center text-xs font-medium">{trendRangeLabel}</span>
+            <button
+              type="button"
+              aria-label="次の期間"
+              onClick={() => setTrendPeriodOffset((v) => v + 1)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 flex h-20 items-end gap-1">
           {dailyTotals.map((d) => {
             const heightPct = Math.max(4, Math.round((d.minutes / maxDailyMinutes) * 100));
             const isToday = d.dateKey === todayKey;
+            const pctOfDay = Math.round((d.minutes / DAILY_CAPACITY_MINUTES) * 100);
+            const isActive = activeTrendKey === d.dateKey;
             return (
-              <div key={d.dateKey} className="flex flex-1 flex-col items-center gap-1">
-                <div className="flex h-16 w-full items-end">
-                  <div
+              <div key={d.dateKey} className="relative flex flex-1 flex-col items-center gap-1">
+                {isActive ? (
+                  <div className="pointer-events-none absolute bottom-full z-10 mb-1 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[10px] font-medium text-background shadow-md">
+                    {formatJst(new Date(`${d.dateKey}T00:00:00+09:00`), 'M/d')}：{d.minutes}分（
+                    {pctOfDay}%）
+                  </div>
+                ) : null}
+                {/* onMouseEnter/onMouseLeave show the tooltip on desktop hover;
+                    onClick doubles as the "tap to show" path on touch devices,
+                    which never fire hover events. */}
+                <button
+                  type="button"
+                  className="flex h-16 w-full items-end"
+                  onMouseEnter={() => setActiveTrendKey(d.dateKey)}
+                  onMouseLeave={() => setActiveTrendKey((k) => (k === d.dateKey ? null : k))}
+                  onClick={() => setActiveTrendKey((k) => (k === d.dateKey ? null : d.dateKey))}
+                  aria-label={`${d.dateKey} ${d.minutes}分（${pctOfDay}%）`}
+                >
+                  <span
                     className={cn(
                       'w-full rounded-t transition-[height]',
                       isToday ? 'bg-primary' : 'bg-muted-foreground/40',
+                      isActive && 'bg-blue-500',
                     )}
                     style={{ height: `${heightPct}%` }}
-                    role="img"
-                    aria-label={`${d.dateKey} ${d.minutes}分`}
                   />
-                </div>
+                </button>
                 <span className="text-[9px] text-muted-foreground">
                   {formatJst(new Date(`${d.dateKey}T00:00:00+09:00`), 'd')}
                 </span>

@@ -82,6 +82,7 @@ export function TaskRow({
         'flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 shadow-sm transition-opacity',
         isDone && 'opacity-50',
         isInProgress && 'border-amber-300 ring-1 ring-amber-200',
+        !isInProgress && !isDone && isNext && 'border-blue-300 ring-1 ring-blue-200',
       )}
     >
       <span className={cn('h-2.5 w-2.5 flex-shrink-0 rounded-full', STATUS_DOT[task.status])} />
