@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { useAuth } from '@/features/auth/useAuth';
 import { createSheetsClient } from '@/lib/google/sheets';
 import { createCalendarClient } from '@/lib/google/calendar';
-import { generateNextWeekRoutines } from '@/features/routines/api/routineGenerator';
+import { generateRoutinesForWeek } from '@/features/routines/api/routineGenerator';
 import { env } from '@/lib/env';
 import { TASKS_QUERY_KEY, useIsSyncing } from '@/features/tasks/hooks/useTasks';
 
@@ -23,9 +23,9 @@ export function useGenerateRoutines() {
   }, [client]);
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (weekOffset: number) => {
       if (!deps) throw new Error('repository unavailable');
-      return generateNextWeekRoutines(deps);
+      return generateRoutinesForWeek(deps, weekOffset);
     },
     onSuccess: () => {
       // See useTaskMutations.ts — skip the forced refetch while a sync is in

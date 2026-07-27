@@ -1,8 +1,7 @@
-import { addDays } from 'date-fns';
 import type { CalendarClient } from '@/lib/google/calendar';
 import { CalendarColor } from '@/lib/google/calendar';
 import type { SheetsClient } from '@/lib/google/sheets';
-import { jstDate, formatJst } from '@/lib/time/jst';
+import { jstDate, formatJst, addDays, startOfJstWeek } from '@/lib/time/jst';
 import { buildTaskRow, formatEventTitle, parseTaskDbRows } from '@/features/tasks/api/serializers';
 import { TASKDB_SHEET } from '@/features/tasks/api/headers';
 import { TaskStatus, type Task } from '@/features/tasks/types';
@@ -55,23 +54,25 @@ function getJstParts(date: Date) {
   };
 }
 
-function nextMondayInJst(now: Date): Date {
-  const parts = getJstParts(now);
-  // Build a JST midnight Date for today, then add days to reach next Monday.
-  const todayJstMidnight = jstDate(parts.year, parts.monthOneBased, parts.day);
-  const todayWeekday = parts.weekday;
-  let daysToNextMonday = (8 - todayWeekday) % 7;
-  if (daysToNextMonday === 0) daysToNextMonday = 7;
-  return addDays(todayJstMidnight, daysToNextMonday);
+/**
+ * Monday of "the week containing `now`, plus `weekOffset` weeks" — 1 (the
+ * default) reproduces the original always-next-week behavior, 0 targets the
+ * current week (Mon..Fri, including any days already past), 2+ reaches
+ * further ahead.
+ */
+function mondayForWeekOffset(now: Date, weekOffset: number): Date {
+  return addDays(startOfJstWeek(now), weekOffset * 7);
 }
 
 /**
- * Generate tasks for next Monday–Friday from the RoutineTasks sheet.
- * Returns a summary including the actual range processed and which tasks were
- * added. De-duplicates against existing TaskDB entries by (JST date + task name).
+ * Generate tasks for the Monday–Friday of the target week (see weekOffset)
+ * from the RoutineTasks sheet. Returns a summary including the actual range
+ * processed and which tasks were added. De-duplicates against existing
+ * TaskDB entries by (JST date + task name).
  */
-export async function generateNextWeekRoutines(
+export async function generateRoutinesForWeek(
   deps: GenerateRoutinesDeps,
+  weekOffset = 1,
 ): Promise<GenerateRoutinesResult> {
   const { sheets, calendar, spreadsheetId, calendarId } = deps;
   const now = deps.now ?? (() => new Date());
@@ -93,7 +94,7 @@ export async function generateNextWeekRoutines(
     ),
   );
 
-  const monday = nextMondayInJst(now());
+  const monday = mondayForWeekOffset(now(), weekOffset);
   const weekDays = Array.from({ length: 5 }, (_, i) => addDays(monday, i)); // Mon..Fri
 
   // For idempotency we build the rows in memory first, then write them in one append.

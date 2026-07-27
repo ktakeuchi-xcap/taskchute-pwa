@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateNextWeekRoutines } from './routineGenerator';
+import { generateRoutinesForWeek } from './routineGenerator';
 import { TASKDB_HEADERS } from '@/features/tasks/api/headers';
 import type { SheetsClient } from '@/lib/google/sheets';
 import type { CalendarClient, CalendarEvent } from '@/lib/google/calendar';
@@ -85,7 +85,7 @@ function createCalendar(): CalendarClient & { inserted: CalendarEvent[] } {
   };
 }
 
-describe('generateNextWeekRoutines', () => {
+describe('generateRoutinesForWeek', () => {
   it('generates 5 business-day tasks (Mon–Fri) when no routines exist yet', async () => {
     const sheets = createSheets({
       TaskDB: [TASKDB_HEADER],
@@ -93,7 +93,7 @@ describe('generateNextWeekRoutines', () => {
     });
     const calendar = createCalendar();
     // 2026-05-19 is a Tuesday in JST → next Monday is 2026-05-25
-    const result = await generateNextWeekRoutines({
+    const result = await generateRoutinesForWeek({
       sheets,
       calendar,
       spreadsheetId: 'sid',
@@ -125,7 +125,7 @@ describe('generateNextWeekRoutines', () => {
       RoutineTasks: [ROUTINE_HEADER, ['毎営業日', '朝会', '09:00', '管理', 15]],
     });
     const calendar = createCalendar();
-    const result = await generateNextWeekRoutines({
+    const result = await generateRoutinesForWeek({
       sheets,
       calendar,
       spreadsheetId: 'sid',
@@ -148,7 +148,7 @@ describe('generateNextWeekRoutines', () => {
       ],
     });
     const calendar = createCalendar();
-    const result = await generateNextWeekRoutines({
+    const result = await generateRoutinesForWeek({
       sheets,
       calendar,
       spreadsheetId: 'sid',
@@ -167,7 +167,7 @@ describe('generateNextWeekRoutines', () => {
       RoutineTasks: [ROUTINE_HEADER],
     });
     const calendar = createCalendar();
-    const result = await generateNextWeekRoutines({
+    const result = await generateRoutinesForWeek({
       sheets,
       calendar,
       spreadsheetId: 'sid',
@@ -176,5 +176,68 @@ describe('generateNextWeekRoutines', () => {
     });
     expect(result.addedCount).toBe(0);
     expect(sheets.appendCalls).toHaveLength(0);
+  });
+
+  it('defaults to next week when weekOffset is omitted', async () => {
+    const sheets = createSheets({
+      TaskDB: [TASKDB_HEADER],
+      RoutineTasks: [ROUTINE_HEADER, ['毎営業日', '朝会', '09:00', '管理', 15]],
+    });
+    const calendar = createCalendar();
+    // 2026-05-19 is a Tuesday in JST → this week's Monday is 2026-05-18.
+    const result = await generateRoutinesForWeek({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+      now: () => new Date('2026-05-19T10:00:00+09:00'),
+      generateId: () => 'tid',
+    });
+    expect(result.weekStartIso).toBe('2026-05-25');
+  });
+
+  it('targets this week (weekOffset 0) instead of next week when asked', async () => {
+    const sheets = createSheets({
+      TaskDB: [TASKDB_HEADER],
+      RoutineTasks: [ROUTINE_HEADER, ['毎営業日', '朝会', '09:00', '管理', 15]],
+    });
+    const calendar = createCalendar();
+    const result = await generateRoutinesForWeek(
+      {
+        sheets,
+        calendar,
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+        now: () => new Date('2026-05-19T10:00:00+09:00'),
+        generateId: () => 'tid',
+      },
+      0,
+    );
+    expect(result.weekStartIso).toBe('2026-05-18');
+    expect(result.weekEndIso).toBe('2026-05-22');
+    // Mon+Tue already past relative to "now" (Tue 10:00) still get generated —
+    // weekOffset 0 is for catching up on a week whose start was missed.
+    expect(result.addedCount).toBe(5);
+  });
+
+  it('reaches further ahead for weekOffset >= 2', async () => {
+    const sheets = createSheets({
+      TaskDB: [TASKDB_HEADER],
+      RoutineTasks: [ROUTINE_HEADER, ['毎営業日', '朝会', '09:00', '管理', 15]],
+    });
+    const calendar = createCalendar();
+    const result = await generateRoutinesForWeek(
+      {
+        sheets,
+        calendar,
+        spreadsheetId: 'sid',
+        calendarId: 'cid',
+        now: () => new Date('2026-05-19T10:00:00+09:00'),
+        generateId: () => 'tid',
+      },
+      2,
+    );
+    expect(result.weekStartIso).toBe('2026-06-01');
+    expect(result.weekEndIso).toBe('2026-06-05');
   });
 });
