@@ -12,6 +12,7 @@ import { isAllDayMeeting } from '@/features/tasks/meetingStatus';
 import { TaskSource, TaskStatus } from '@/features/tasks/types';
 import { DAILY_CAPACITY_MINUTES } from '@/features/tasks/workload';
 import {
+  aggregateDailyByCategory,
   aggregateDailyTotals,
   aggregateMonthlyByCategory,
   toPersonMonths,
@@ -92,6 +93,10 @@ export function DashboardRoute() {
   const trendDateKeys = useMemo(() => buildTrendDateKeys(trendPeriodOffset), [trendPeriodOffset]);
   const dailyTotals = useMemo(
     () => aggregateDailyTotals(tasks, trendDateKeys),
+    [tasks, trendDateKeys],
+  );
+  const dailyCategoryBreakdowns = useMemo(
+    () => aggregateDailyByCategory(tasks, trendDateKeys),
     [tasks, trendDateKeys],
   );
   const maxDailyMinutes = Math.max(1, ...dailyTotals.map((d) => d.minutes));
@@ -203,17 +208,36 @@ export function DashboardRoute() {
           </div>
         </div>
         <div className="mt-4 flex h-20 items-end gap-1">
-          {dailyTotals.map((d) => {
+          {dailyTotals.map((d, i) => {
             const heightPct = Math.max(4, Math.round((d.minutes / maxDailyMinutes) * 100));
             const isToday = d.dateKey === todayKey;
             const pctOfDay = Math.round((d.minutes / DAILY_CAPACITY_MINUTES) * 100);
             const isActive = activeTrendKey === d.dateKey;
+            const categories = dailyCategoryBreakdowns[i]?.categories ?? [];
             return (
               <div key={d.dateKey} className="relative flex flex-1 flex-col items-center gap-1">
                 {isActive ? (
-                  <div className="pointer-events-none absolute bottom-full z-10 mb-1 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[10px] font-medium text-background shadow-md">
-                    {formatJst(new Date(`${d.dateKey}T00:00:00+09:00`), 'M/d')}：{d.minutes}分（
-                    {pctOfDay}%）
+                  <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 w-max max-w-[45vw] -translate-x-1/2 text-left rounded-md bg-foreground px-2 py-1.5 text-[10px] text-background shadow-md">
+                    <div className="whitespace-nowrap font-medium">
+                      {formatJst(new Date(`${d.dateKey}T00:00:00+09:00`), 'M/d')}：{d.minutes}分（
+                      {pctOfDay}%）
+                    </div>
+                    {categories.length > 0 ? (
+                      <div className="mt-1 space-y-0.5 border-t border-background/20 pt-1">
+                        {categories.map((c) => (
+                          <div key={c.category} className="flex items-center gap-1">
+                            <span
+                              className={cn(
+                                'h-1.5 w-1.5 flex-shrink-0 rounded-full',
+                                categoryDotClassName(categoryColorMap.get(c.category)),
+                              )}
+                            />
+                            <span className="max-w-[100px] flex-1 truncate">{c.category}</span>
+                            <span className="flex-shrink-0">{c.minutes}分</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
                 {/* onMouseEnter/onMouseLeave show the tooltip on desktop hover;
@@ -227,14 +251,26 @@ export function DashboardRoute() {
                   onClick={() => setActiveTrendKey((k) => (k === d.dateKey ? null : d.dateKey))}
                   aria-label={`${d.dateKey} ${d.minutes}分（${pctOfDay}%）`}
                 >
-                  <span
+                  <div
                     className={cn(
-                      'w-full rounded-t transition-[height]',
-                      isToday ? 'bg-primary' : 'bg-muted-foreground/40',
-                      isActive && 'bg-blue-500',
+                      'flex w-full flex-col-reverse overflow-hidden rounded-t transition-[height]',
+                      (!isActive || categories.length === 0) &&
+                        (isToday ? 'bg-primary' : 'bg-muted-foreground/40'),
                     )}
                     style={{ height: `${heightPct}%` }}
-                  />
+                  >
+                    {/* Only broken down by 案件 color while hovered/tapped —
+                        otherwise it's a plain today/other-day bar like before. */}
+                    {isActive && categories.length > 0
+                      ? categories.map((c) => (
+                          <div
+                            key={c.category}
+                            className={categoryDotClassName(categoryColorMap.get(c.category))}
+                            style={{ height: `${(c.minutes / d.minutes) * 100}%` }}
+                          />
+                        ))
+                      : null}
+                  </div>
                 </button>
                 <span className="text-[9px] text-muted-foreground">
                   {formatJst(new Date(`${d.dateKey}T00:00:00+09:00`), 'd')}

@@ -68,3 +68,37 @@ export function aggregateDailyTotals(tasks: Task[], dateKeys: string[]): DailyTo
   }
   return dateKeys.map((dateKey) => ({ dateKey, minutes: totals.get(dateKey) ?? 0 }));
 }
+
+export interface DailyCategoryBreakdown {
+  dateKey: string;
+  /** Sorted by minutes descending, same shape as aggregateMonthlyByCategory. */
+  categories: CategoryMonthlyTotal[];
+}
+
+/**
+ * Per-day category breakdown of actual worked minutes, for exactly the given
+ * "yyyy-MM-dd" keys (JST) — the per-category companion to
+ * aggregateDailyTotals, used to break each day's trend bar down by 案件.
+ */
+export function aggregateDailyByCategory(
+  tasks: Task[],
+  dateKeys: string[],
+): DailyCategoryBreakdown[] {
+  const perDay = new Map<string, Map<string, number>>(dateKeys.map((key) => [key, new Map()]));
+  for (const task of tasks) {
+    if (task.status !== TaskStatus.Done || !task.actualStartTime) continue;
+    const key = formatJst(task.actualStartTime, 'yyyy-MM-dd');
+    const dayTotals = perDay.get(key);
+    if (!dayTotals) continue;
+    const minutes = actualMinutes(task);
+    if (minutes <= 0) continue;
+    const category = task.category ?? UNCATEGORIZED_LABEL;
+    dayTotals.set(category, (dayTotals.get(category) ?? 0) + minutes);
+  }
+  return dateKeys.map((dateKey) => ({
+    dateKey,
+    categories: [...(perDay.get(dateKey) ?? new Map<string, number>()).entries()]
+      .map(([category, minutes]) => ({ category, minutes }))
+      .sort((a, b) => b.minutes - a.minutes),
+  }));
+}

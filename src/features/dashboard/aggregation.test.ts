@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   actualMinutes,
+  aggregateDailyByCategory,
   aggregateDailyTotals,
   aggregateMonthlyByCategory,
   toPersonMonths,
@@ -160,5 +161,64 @@ describe('aggregateDailyTotals', () => {
     ];
     const result = aggregateDailyTotals(tasks, ['2026-06-06']);
     expect(result).toEqual([{ dateKey: '2026-06-06', minutes: 0 }]);
+  });
+});
+
+describe('aggregateDailyByCategory', () => {
+  it('breaks each day down by category, sorted descending, and fills [] for empty days', () => {
+    const tasks = [
+      makeTask({
+        category: '案件A',
+        status: TaskStatus.Done,
+        actualStartTime: new Date('2026-06-05T09:00:00+09:00'),
+        actualEndTime: new Date('2026-06-05T09:20:00+09:00'),
+      }),
+      makeTask({
+        category: '案件B',
+        status: TaskStatus.Done,
+        actualStartTime: new Date('2026-06-05T10:00:00+09:00'),
+        actualEndTime: new Date('2026-06-05T10:40:00+09:00'),
+      }),
+    ];
+    const result = aggregateDailyByCategory(tasks, ['2026-06-04', '2026-06-05']);
+    expect(result).toEqual([
+      { dateKey: '2026-06-04', categories: [] },
+      {
+        dateKey: '2026-06-05',
+        categories: [
+          { category: '案件B', minutes: 40 },
+          { category: '案件A', minutes: 20 },
+        ],
+      },
+    ]);
+  });
+
+  it('groups uncategorized tasks under the fallback label', () => {
+    const tasks = [
+      makeTask({
+        category: null,
+        status: TaskStatus.Done,
+        actualStartTime: new Date('2026-06-05T09:00:00+09:00'),
+        actualEndTime: new Date('2026-06-05T09:20:00+09:00'),
+      }),
+    ];
+    const result = aggregateDailyByCategory(tasks, ['2026-06-05']);
+    expect(result).toEqual([
+      { dateKey: '2026-06-05', categories: [{ category: '未分類', minutes: 20 }] },
+    ]);
+  });
+
+  it('excludes tasks opted out of workload, same as actualMinutes', () => {
+    const tasks = [
+      makeTask({
+        category: '案件A',
+        status: TaskStatus.Done,
+        actualStartTime: new Date('2026-06-05T09:00:00+09:00'),
+        actualEndTime: new Date('2026-06-05T09:20:00+09:00'),
+        countsTowardWorkload: false,
+      }),
+    ];
+    const result = aggregateDailyByCategory(tasks, ['2026-06-05']);
+    expect(result).toEqual([{ dateKey: '2026-06-05', categories: [] }]);
   });
 });

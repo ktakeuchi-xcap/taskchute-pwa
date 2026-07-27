@@ -81,6 +81,14 @@ export function TodayRoute() {
     [tasksQuery.data],
   );
 
+  // All-day meetings get their own "終日予定" section above the regular
+  // list — they have no start-time slot to sit in among timed tasks.
+  const allDayTasks = useMemo(() => activeTasks.filter((t) => isAllDayMeeting(t)), [activeTasks]);
+  const regularActiveTasks = useMemo(
+    () => activeTasks.filter((t) => !isAllDayMeeting(t)),
+    [activeTasks],
+  );
+
   // "本日の確認待ち" = due today or already overdue (not yet completed) — an
   // overdue follow-up is exactly the kind of thing today's screen should
   // surface, not just items whose date is literally today.
@@ -156,12 +164,39 @@ export function TodayRoute() {
             </>
           )}
 
+          {allDayTasks.length > 0 ? (
+            <div className="pt-2">
+              <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                終日予定
+              </h2>
+              <TaskList
+                tasks={allDayTasks}
+                nextTaskId={next?.taskId ?? null}
+                onDelete={(taskId) => deleteMutation.mutate(taskId)}
+                isDeleting={deleteMutation.isPending}
+              />
+            </div>
+          ) : null}
+
+          {doneTasks.length > 0 ? (
+            <div className="pt-2">
+              <CollapsibleSection title={`完了済み（${doneTasks.length}件）`}>
+                <TaskList
+                  tasks={doneTasks}
+                  nextTaskId={null}
+                  onDelete={(taskId) => deleteMutation.mutate(taskId)}
+                  isDeleting={deleteMutation.isPending}
+                />
+              </CollapsibleSection>
+            </div>
+          ) : null}
+
           <div className="pt-2">
             <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               本日のタスク一覧
             </h2>
             <TaskList
-              tasks={activeTasks}
+              tasks={regularActiveTasks}
               nextTaskId={next?.taskId ?? null}
               onDelete={(taskId) => deleteMutation.mutate(taskId)}
               isDeleting={deleteMutation.isPending}
@@ -171,18 +206,6 @@ export function TodayRoute() {
                   : '本日のタスクはまだありません'
               }
             />
-            {doneTasks.length > 0 ? (
-              <div className="mt-2">
-                <CollapsibleSection title={`完了済み（${doneTasks.length}件）`}>
-                  <TaskList
-                    tasks={doneTasks}
-                    nextTaskId={null}
-                    onDelete={(taskId) => deleteMutation.mutate(taskId)}
-                    isDeleting={deleteMutation.isPending}
-                  />
-                </CollapsibleSection>
-              </div>
-            ) : null}
           </div>
 
           {dueWaitingTasks.length > 0 ? (

@@ -118,7 +118,7 @@ export function TaskRow({
       <div className="flex flex-shrink-0 flex-col items-end gap-1">
         {isInProgress && <Badge variant="progress">進行中</Badge>}
         {isDone && <Badge variant="done">完了</Badge>}
-        {!isInProgress && !isDone && isNext && <Badge variant="next">次へ</Badge>}
+        {!isInProgress && !isDone && isNext && <Badge variant="next">次のタスク</Badge>}
         {!isInProgress && !isDone && !isNext && (
           <span className="text-[11px] text-muted-foreground">未着手</span>
         )}
