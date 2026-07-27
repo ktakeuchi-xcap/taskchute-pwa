@@ -1,5 +1,6 @@
 import { AddTaskForm } from '@/features/tasks/components/AddTaskForm';
 import { AddWaitingForm } from '@/features/waiting/components/AddWaitingForm';
+import { GenerateRoutinesSection } from '@/features/routines/components/GenerateRoutinesSection';
 
 export function AddRoute() {
   return (
@@ -22,6 +23,18 @@ export function AddRoute() {
           <p className="text-xs text-muted-foreground">Google ToDo にも自動で登録されます</p>
         </div>
         <AddWaitingForm />
+      </section>
+
+      <hr className="border-border" />
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-bold">🔁 ルーチンタスクを生成</h2>
+          <p className="text-xs text-muted-foreground">
+            「RoutineTasks」シートの設定に基づき、指定した週のタスクをまとめて追加します
+          </p>
+        </div>
+        <GenerateRoutinesSection />
       </section>
     </div>
   );
