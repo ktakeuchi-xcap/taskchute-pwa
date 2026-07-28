@@ -41,6 +41,9 @@ function createMockSheets(routineTasks: unknown[][]): SheetsClient & {
     async getSheetMetadata() {
       return [{ sheetId: 99, title: 'RoutineTasks' }];
     },
+    async addSheet() {
+      return { sheetId: 1, title: '' };
+    },
   };
 }
 

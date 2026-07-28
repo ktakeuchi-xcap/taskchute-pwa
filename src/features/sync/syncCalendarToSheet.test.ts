@@ -46,6 +46,9 @@ function mockSheets(values: unknown[][]): SheetsClient & {
     async getSheetMetadata() {
       return [{ sheetId: 42, title: 'TaskDB' }];
     },
+    async addSheet() {
+      return { sheetId: 1, title: '' };
+    },
   };
 }
 

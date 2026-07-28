@@ -58,7 +58,7 @@ export function WorkReportSection() {
     const setting = (reportSettingsQuery.data ?? []).find((s) => s.category === category);
     if (!setting) {
       setError(
-        `「${category}」の宛名・保存先フォルダが未設定です。ReportSettingsシートに、この案件名で1行追加してください。`,
+        `「${category}」の宛名・保存先フォルダが未設定です。「設定」タブの「作業報告書の宛先・保存先」から登録してください。`,
       );
       return;
     }

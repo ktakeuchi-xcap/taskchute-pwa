@@ -49,6 +49,9 @@ function mockSheets(values: unknown[][] | (() => never)): SheetsClient & {
     async getSheetMetadata() {
       return [{ sheetId: 1, title: MEETING_CATEGORY_RULES_SHEET }];
     },
+    async addSheet() {
+      return { sheetId: 1, title: '' };
+    },
   };
 }
 

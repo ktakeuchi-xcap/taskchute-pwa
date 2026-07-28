@@ -22,6 +22,9 @@ function mockSheets(initialCell: unknown = ''): SheetsClient & { updateCalls: un
     async getSheetMetadata() {
       return [];
     },
+    async addSheet() {
+      return { sheetId: 1, title: '' };
+    },
   };
 }
 

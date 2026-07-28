@@ -88,3 +88,35 @@ describe('createSheetsClient.appendRows', () => {
     expect(url).toContain(encodeURIComponent('TaskDB!B2') + ':append');
   });
 });
+
+describe('createSheetsClient.addSheet', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('issues an addSheet batchUpdate request and returns the new sheet properties', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            replies: [{ addSheet: { properties: { sheetId: 123, title: 'ReportSettings' } } }],
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+    const client = createSheetsClient(fakeClient());
+    const result = await client.addSheet('sid', 'ReportSettings');
+
+    expect(result).toEqual({ sheetId: 123, title: 'ReportSettings' });
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe('https://sheets.googleapis.com/v4/spreadsheets/sid:batchUpdate');
+    const body = JSON.parse(init!.body as string) as {
+      requests: Array<{ addSheet: { properties: { title: string } } }>;
+    };
+    expect(body.requests).toEqual([{ addSheet: { properties: { title: 'ReportSettings' } } }]);
+  });
+});

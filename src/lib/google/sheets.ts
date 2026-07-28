@@ -34,6 +34,8 @@ export interface SheetsClient {
   deleteRows(spreadsheetId: string, sheetId: number, rowIndexes: number[]): Promise<void>;
   /** Resolve numeric sheet IDs by name. */
   getSheetMetadata(spreadsheetId: string): Promise<SheetMetadata[]>;
+  /** Creates a new, empty sheet tab (e.g. for a feature that self-provisions its own config sheet). */
+  addSheet(spreadsheetId: string, title: string): Promise<SheetMetadata>;
 }
 
 function encodeRange(range: string): string {
@@ -135,6 +137,17 @@ export function createSheetsClient(auth: AuthClient): SheetsClient {
         sheets: Array<{ properties: { sheetId: number; title: string } }>;
       }>(auth, url);
       return data.sheets.map((s) => s.properties);
+    },
+
+    async addSheet(spreadsheetId, title) {
+      const url = `${BASE}/${spreadsheetId}:batchUpdate`;
+      const data = await gfetchJson<{
+        replies: Array<{ addSheet: { properties: { sheetId: number; title: string } } }>;
+      }>(auth, url, {
+        method: 'POST',
+        json: { requests: [{ addSheet: { properties: { title } } }] },
+      });
+      return data.replies[0]!.addSheet.properties;
     },
   };
 }

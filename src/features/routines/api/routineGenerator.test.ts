@@ -45,6 +45,9 @@ function createSheets(state: SheetState): SheetsClient & {
     async getSheetMetadata() {
       return [];
     },
+    async addSheet() {
+      return { sheetId: 1, title: '' };
+    },
   };
 }
 

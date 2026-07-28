@@ -3,6 +3,7 @@ import { ThemePicker } from '@/components/ThemePicker';
 import { CategoryManager } from '@/features/tasks/components/CategoryManager';
 import { RoutineManager } from '@/features/routines/components/RoutineManager';
 import { AccountSection } from '@/features/auth/components/AccountSection';
+import { ReportSettingsManager } from '@/features/reports/components/ReportSettingsManager';
 
 export function SettingsRoute() {
   return (
@@ -16,6 +17,9 @@ export function SettingsRoute() {
       </CollapsibleSection>
       <CollapsibleSection title="ルーチンタスク">
         <RoutineManager />
+      </CollapsibleSection>
+      <CollapsibleSection title="作業報告書の宛先・保存先">
+        <ReportSettingsManager />
       </CollapsibleSection>
       <AccountSection />
     </div>

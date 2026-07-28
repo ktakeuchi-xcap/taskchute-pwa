@@ -33,6 +33,9 @@ function mockSheets(values: unknown[][]): SheetsClient & {
     async getSheetMetadata() {
       return [];
     },
+    async addSheet() {
+      return { sheetId: 1, title: '' };
+    },
   };
 }
 

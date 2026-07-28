@@ -83,6 +83,9 @@ function createMockSheets(state: SheetState): SheetsClient & {
         { sheetId: 7, title: 'Settings' },
       ];
     },
+    async addSheet() {
+      return { sheetId: 1, title: '' };
+    },
   };
 }
 

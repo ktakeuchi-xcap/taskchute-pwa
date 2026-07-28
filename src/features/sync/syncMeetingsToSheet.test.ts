@@ -70,6 +70,9 @@ function mockSheets(
     async getSheetMetadata() {
       return [{ sheetId: 42, title: 'TaskDB' }];
     },
+    async addSheet() {
+      return { sheetId: 1, title: '' };
+    },
   };
 }
 
