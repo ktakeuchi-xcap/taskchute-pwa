@@ -80,39 +80,35 @@ function createMockDrive(): DriveClient & { moved: Array<{ fileId: string; folde
 }
 
 describe('generateReportDoc', () => {
-  it('inserts the header block, bold styling, and an empty table in the first batchUpdate', async () => {
+  it('inserts the header block and an empty table in the first batchUpdate — no bold styling yet', async () => {
     const docs = createMockDocs();
     const drive = createMockDrive();
     await generateReportDoc({ docs, drive }, CONTENT, 'folder-1');
 
     const first = docs.batchCalls[0] as Array<Record<string, unknown>>;
-    expect(first[0]).toEqual({
-      insertText: { location: { index: 1 }, text: 'header-block-text' },
-    });
-    expect(first[1]).toEqual({
-      updateTextStyle: {
-        range: { startIndex: 1, endIndex: 7 },
-        textStyle: { bold: true },
-        fields: 'bold',
+    expect(first).toEqual([
+      { insertText: { location: { index: 1 }, text: 'header-block-text' } },
+      {
+        insertTable: { location: { index: 1 + 'header-block-text'.length }, rows: 2, columns: 3 },
       },
-    });
-    expect(first[2]).toEqual({
-      insertTable: { location: { index: 1 + 'header-block-text'.length }, rows: 2, columns: 3 },
-    });
+    ]);
   });
 
-  it('fills the footer and all six cells in the second batchUpdate, ordered from the largest index down', async () => {
+  it('fills the footer and all six cells in the second batchUpdate, ordered from the largest index down, then bolds the header ranges last', async () => {
     const docs = createMockDocs();
     const drive = createMockDrive();
     await generateReportDoc({ docs, drive }, CONTENT, 'folder-1');
 
-    const second = docs.batchCalls[1] as Array<{
-      insertText: { location: { index: number }; text: string };
-    }>;
-    const indices = second.map((r) => r.insertText.location.index);
+    const second = docs.batchCalls[1] as Array<Record<string, unknown>>;
+    const insertions = second.filter(
+      (r): r is { insertText: { location: { index: number }; text: string } } => 'insertText' in r,
+    );
+    const indices = insertions.map((r) => r.insertText.location.index);
     expect(indices).toEqual([120, 101, 91, 82, 61, 56, 53]);
 
-    const byIndex = new Map(second.map((r) => [r.insertText.location.index, r.insertText.text]));
+    const byIndex = new Map(
+      insertions.map((r) => [r.insertText.location.index, r.insertText.text]),
+    );
     expect(byIndex.get(120)).toBe('footer-block-text');
     expect(byIndex.get(53)).toBe('No.');
     expect(byIndex.get(56)).toBe('アクティビティ');
@@ -120,6 +116,16 @@ describe('generateReportDoc', () => {
     expect(byIndex.get(82)).toBe('1');
     expect(byIndex.get(91)).toBe('案件A');
     expect(byIndex.get(101)).toBe('・週次MTGへの参加');
+
+    // Bold styling is applied last — after every insertion — so nothing
+    // subsequently inserted can inherit it (the bug this regression guards).
+    expect(second[second.length - 1]).toEqual({
+      updateTextStyle: {
+        range: { startIndex: 1, endIndex: 7 },
+        textStyle: { bold: true },
+        fields: 'bold',
+      },
+    });
   });
 
   it('moves the created doc into the given folder and returns its edit URL', async () => {

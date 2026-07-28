@@ -109,7 +109,7 @@ describe('buildReportDocContent', () => {
     });
 
     expect(content.title).toBe('作業報告書_案件A_2026年6月');
-    expect(content.headerText).toContain('株式会社PKSHA Technology 御中');
+    expect(content.headerText).toContain('株式会社PKSHA Technology　御中'); // 全角スペース
     expect(content.headerText).toContain('作業実績報告書');
     expect(content.headerText).toContain('2026年6月30日'); // last day of June
     expect(content.headerText).toContain(
@@ -124,7 +124,7 @@ describe('buildReportDocContent', () => {
     expect(content.footerText).toContain('担当：');
   });
 
-  it('reports bold ranges that exactly cover the title and total-workload lines', () => {
+  it('bolds the title, and only the label part of the total-workload line (not the figure)', () => {
     const content = buildReportDocContent({
       category: '案件A',
       yearMonth: '2026-06',
@@ -132,9 +132,12 @@ describe('buildReportDocContent', () => {
       totalMinutes: 0,
       activityText: '・作業なし',
     });
-    for (const range of content.headerBoldRanges) {
-      const text = content.headerText.slice(range.start, range.end);
-      expect(text === '作業実績報告書' || text.includes('作業実績（合計稼働')).toBe(true);
-    }
+    const [titleRange, totalRange] = content.headerBoldRanges;
+    expect(content.headerText.slice(titleRange!.start, titleRange!.end)).toBe('作業実績報告書');
+    expect(content.headerText.slice(totalRange!.start, totalRange!.end)).toBe(
+      '2026年6月の作業実績（合計稼働：',
+    );
+    // The figure itself and the closing "）" stay outside the bold range.
+    expect(content.headerText.slice(totalRange!.end)).toMatch(/^0\.00人月）/);
   });
 });

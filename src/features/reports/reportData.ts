@@ -95,10 +95,15 @@ export function buildReportDocContent(input: {
   const personMonths = toPersonMonths(totalMinutes).toFixed(2);
 
   const titleLine = '作業実績報告書';
-  const totalLine = `${year}年${month}月の作業実績（合計稼働：${personMonths}人月）`;
+  // Standard format only bolds the label, not the figure itself (見本参照)。
+  const totalLineLabel = `${year}年${month}月の作業実績（合計稼働：`;
+  const totalLine = `${totalLineLabel}${personMonths}人月）`;
 
   const lines = [
-    `${clientName} 御中`,
+    // 全角スペースを使う（標準フォーマットのサンプルに合わせる。半角だと体裁が崩れる）。
+    // 全角スペースはno-irregular-whitespaceの対象になるテンプレートリテラルを避け、
+    // 対象外の通常の文字列リテラルとして連結する。
+    clientName + '　御中',
     '',
     titleLine,
     '',
@@ -115,7 +120,7 @@ export function buildReportDocContent(input: {
   const headerText = lines.join('\n');
 
   const titleStart = headerText.indexOf(titleLine);
-  const totalStart = headerText.lastIndexOf(totalLine);
+  const totalLabelStart = headerText.lastIndexOf(totalLineLabel);
 
   const footerText = [
     '以上',
@@ -134,7 +139,7 @@ export function buildReportDocContent(input: {
     headerText,
     headerBoldRanges: [
       { start: titleStart, end: titleStart + titleLine.length },
-      { start: totalStart, end: totalStart + totalLine.length },
+      { start: totalLabelStart, end: totalLabelStart + totalLineLabel.length },
     ],
     tableHeaderCells: ['No.', 'アクティビティ', '作業実績'],
     tableDataCells: ['1', category, activityText.trim()],

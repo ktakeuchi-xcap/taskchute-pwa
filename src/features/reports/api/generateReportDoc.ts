@@ -17,13 +17,18 @@ export interface GeneratedReportDoc {
  *
  * 1. Insert all the plain-text paragraphs (header block) plus an empty
  *    table — insertTable only creates the grid, it can't seed cell text at
- *    creation time, so cells are filled in a second pass below.
+ *    creation time, so cells are filled in a second pass below. Bold styling
+ *    is deliberately NOT applied here yet — see the note below.
  * 2. Read the document back to find where each table cell (and the
  *    paragraph Docs auto-inserts right after the table) actually landed,
- *    then insert the footer + all six cells' text in one batchUpdate,
- *    ordered from the largest index to the smallest — inserting at a later
- *    position never shifts the indices of the earlier ones still queued
- *    behind it in the same request array.
+ *    then insert the footer + all six cells' text, ordered from the largest
+ *    index to the smallest (inserting at a later position never shifts the
+ *    indices of the earlier ones still queued behind it), followed by the
+ *    bold-range styling. Bold is applied LAST, after every insertion, because
+ *    Docs makes newly inserted text inherit the style of whatever
+ *    immediately precedes the insertion point — bolding the header block
+ *    first (before the table/footer existed) made the table headers, table
+ *    data, and the entire footer come out bold too.
  */
 export async function generateReportDoc(
   deps: GenerateReportDocDeps,
@@ -36,13 +41,6 @@ export async function generateReportDoc(
   const tableInsertIndex = 1 + content.headerText.length;
   await docs.batchUpdate(documentId, [
     { insertText: { location: { index: 1 }, text: content.headerText } },
-    ...content.headerBoldRanges.map((r) => ({
-      updateTextStyle: {
-        range: { startIndex: 1 + r.start, endIndex: 1 + r.end },
-        textStyle: { bold: true },
-        fields: 'bold',
-      },
-    })),
     { insertTable: { location: { index: tableInsertIndex }, rows: 2, columns: 3 } },
   ]);
 
@@ -82,10 +80,16 @@ export async function generateReportDoc(
   });
   insertions.sort((a, b) => b.index - a.index);
 
-  await docs.batchUpdate(
-    documentId,
-    insertions.map((i) => ({ insertText: { location: { index: i.index }, text: i.text } })),
-  );
+  await docs.batchUpdate(documentId, [
+    ...insertions.map((i) => ({ insertText: { location: { index: i.index }, text: i.text } })),
+    ...content.headerBoldRanges.map((r) => ({
+      updateTextStyle: {
+        range: { startIndex: 1 + r.start, endIndex: 1 + r.end },
+        textStyle: { bold: true },
+        fields: 'bold',
+      },
+    })),
+  ]);
 
   if (folderId) {
     await drive.moveToFolder(documentId, folderId);
