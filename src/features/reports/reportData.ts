@@ -65,16 +65,37 @@ export function buildReportPrompt(
   ].join('\n');
 }
 
+export interface StyleRange {
+  start: number;
+  end: number;
+}
+
+// Measured directly from a real standard-format document (not guessed) by
+// exporting it to HTML and reading its inline styles — see ISS-28.
+export const BASE_FONT_PT = 12;
+export const TITLE_FONT_PT = 16;
+export const TOTAL_LINE_FONT_PT = 14;
+export const TABLE_HEADER_FONT_PT = 12;
+export const TABLE_DATA_FONT_PT = 10.5;
+/** [No., アクティビティ, 作業実績] column widths in points — roughly a 1:6:14 ratio. */
+export const TABLE_COLUMN_WIDTHS_PT: [number, number, number] = [29.2, 132.7, 326];
+
 export interface ReportDocContent {
   title: string;
   /** Everything from the recipient line through the "◯月の作業実績（合計稼働：…）" line, newline-joined. */
   headerText: string;
-  /** Character ranges within headerText to bold (the title, and the total-workload line). */
-  headerBoldRanges: Array<{ start: number; end: number }>;
+  /** Character ranges within headerText to bold (the title, and the total-workload line's label). */
+  headerBoldRanges: StyleRange[];
+  /** Character ranges within headerText to render at a larger size than the base font. */
+  headerFontSizeRanges: Array<{ range: StyleRange; pointSize: number }>;
+  /** Paragraph ranges within headerText to right-align (the report date and sender name lines). */
+  headerRightAlignRanges: StyleRange[];
   tableHeaderCells: [string, string, string];
   tableDataCells: [string, string, string];
   /** From "以上" through "担当：", newline-joined. */
   footerText: string;
+  /** The "年 月 日 / 宛先 / 担当：" block within footerText — right-aligned and boxed (検収印欄). */
+  footerBoxRange: StyleRange;
 }
 
 /** Builds the standard-format report's static text content — pure and independent of the Docs API itself. */
@@ -99,20 +120,25 @@ export function buildReportDocContent(input: {
   const totalLineLabel = `${year}年${month}月の作業実績（合計稼働：`;
   const totalLine = `${totalLineLabel}${personMonths}人月）`;
 
+  // Blank-line spacing below matches the real sample exactly (2 blanks after
+  // 御中, 1 after the title, 0 between date/sender and again between the
+  // period/thanks sentences, 2 before the period sentence, 1 before the
+  // total line) — the previous version put a uniform 1 blank line between
+  // every line, which read as too loose (ISS-28).
   const lines = [
     // 全角スペースを使う（標準フォーマットのサンプルに合わせる。半角だと体裁が崩れる）。
     // 全角スペースはno-irregular-whitespaceの対象になるテンプレートリテラルを避け、
     // 対象外の通常の文字列リテラルとして連結する。
     clientName + '　御中',
     '',
+    '',
     titleLine,
     '',
     reportDateLabel,
-    '',
     SENDER_COMPANY_NAME,
     '',
-    `${periodStartLabel}～${periodEndLabel}までの作業実績を報告いたします。`,
     '',
+    `${periodStartLabel}～${periodEndLabel}までの作業実績を報告いたします。`,
     'ご査収の程、よろしくお願い申し上げます。',
     '',
     totalLine,
@@ -121,18 +147,21 @@ export function buildReportDocContent(input: {
 
   const titleStart = headerText.indexOf(titleLine);
   const totalLabelStart = headerText.lastIndexOf(totalLineLabel);
+  const totalLineStart = totalLabelStart;
+  const dateStart = headerText.indexOf(reportDateLabel);
+  const senderStart = headerText.indexOf(SENDER_COMPANY_NAME);
 
-  const footerText = [
+  const footerLines = [
     '以上',
     '',
     '上記を検収いたしました。',
     '',
     '年　月　日',
-    '',
     clientName,
-    '',
     '担当：',
-  ].join('\n');
+  ];
+  const footerText = footerLines.join('\n');
+  const footerBoxStart = footerText.indexOf('年　月　日');
 
   return {
     title: `作業報告書_${category}_${year}年${month}月`,
@@ -141,8 +170,23 @@ export function buildReportDocContent(input: {
       { start: titleStart, end: titleStart + titleLine.length },
       { start: totalLabelStart, end: totalLabelStart + totalLineLabel.length },
     ],
+    headerFontSizeRanges: [
+      {
+        range: { start: titleStart, end: titleStart + titleLine.length },
+        pointSize: TITLE_FONT_PT,
+      },
+      {
+        range: { start: totalLineStart, end: totalLineStart + totalLine.length },
+        pointSize: TOTAL_LINE_FONT_PT,
+      },
+    ],
+    headerRightAlignRanges: [
+      { start: dateStart, end: dateStart + reportDateLabel.length },
+      { start: senderStart, end: senderStart + SENDER_COMPANY_NAME.length },
+    ],
     tableHeaderCells: ['No.', 'アクティビティ', '作業実績'],
     tableDataCells: ['1', category, activityText.trim()],
     footerText,
+    footerBoxRange: { start: footerBoxStart, end: footerText.length },
   };
 }

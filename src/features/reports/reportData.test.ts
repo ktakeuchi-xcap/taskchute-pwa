@@ -140,4 +140,50 @@ describe('buildReportDocContent', () => {
     // The figure itself and the closing "）" stay outside the bold range.
     expect(content.headerText.slice(totalRange!.end)).toMatch(/^0\.00人月）/);
   });
+
+  it('sizes the title/total-line larger than the base font, matching the bold ranges', () => {
+    const content = buildReportDocContent({
+      category: '案件A',
+      yearMonth: '2026-06',
+      clientName: '株式会社PKSHA Technology',
+      totalMinutes: 0,
+      activityText: '・作業なし',
+    });
+    const [titleSize, totalSize] = content.headerFontSizeRanges;
+    expect(content.headerText.slice(titleSize!.range.start, titleSize!.range.end)).toBe(
+      '作業実績報告書',
+    );
+    expect(titleSize!.pointSize).toBe(16);
+    expect(totalSize!.pointSize).toBe(14);
+  });
+
+  it('right-aligns the report-date and sender-name lines', () => {
+    const content = buildReportDocContent({
+      category: '案件A',
+      yearMonth: '2026-06',
+      clientName: '株式会社PKSHA Technology',
+      totalMinutes: 0,
+      activityText: '・作業なし',
+    });
+    const [dateRange, senderRange] = content.headerRightAlignRanges;
+    expect(content.headerText.slice(dateRange!.start, dateRange!.end)).toBe('2026年6月30日');
+    expect(content.headerText.slice(senderRange!.start, senderRange!.end)).toBe(
+      SENDER_COMPANY_NAME,
+    );
+  });
+
+  it('marks the 年月日/宛先/担当 block (検収印欄) for the boxed treatment', () => {
+    const content = buildReportDocContent({
+      category: '案件A',
+      yearMonth: '2026-06',
+      clientName: '株式会社PKSHA Technology',
+      totalMinutes: 0,
+      activityText: '・作業なし',
+    });
+    const boxed = content.footerText.slice(
+      content.footerBoxRange.start,
+      content.footerBoxRange.end,
+    );
+    expect(boxed).toBe('年　月　日\n株式会社PKSHA Technology\n担当：');
+  });
 });

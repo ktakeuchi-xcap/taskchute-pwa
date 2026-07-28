@@ -1,6 +1,12 @@
 import type { DocsClient } from '@/lib/google/docs';
 import type { DriveClient } from '@/lib/google/drive';
-import type { ReportDocContent } from '../reportData';
+import {
+  BASE_FONT_PT,
+  TABLE_COLUMN_WIDTHS_PT,
+  TABLE_DATA_FONT_PT,
+  TABLE_HEADER_FONT_PT,
+  type ReportDocContent,
+} from '../reportData';
 
 export interface GenerateReportDocDeps {
   docs: DocsClient;
@@ -12,23 +18,77 @@ export interface GeneratedReportDoc {
   url: string;
 }
 
+function fontSizeRequest(startIndex: number, endIndex: number, pointSize: number) {
+  return {
+    updateTextStyle: {
+      range: { startIndex, endIndex },
+      textStyle: { fontSize: { magnitude: pointSize, unit: 'PT' } },
+      fields: 'fontSize',
+    },
+  };
+}
+
+function boldRequest(startIndex: number, endIndex: number) {
+  return {
+    updateTextStyle: {
+      range: { startIndex, endIndex },
+      textStyle: { bold: true },
+      fields: 'bold',
+    },
+  };
+}
+
+function rightAlignRequest(startIndex: number, endIndex: number) {
+  return {
+    updateParagraphStyle: {
+      range: { startIndex, endIndex },
+      paragraphStyle: { alignment: 'END' },
+      fields: 'alignment',
+    },
+  };
+}
+
+/** A thin solid black rule on all four sides — approximates the 検収印 box in the standard format. */
+function boxBorderRequest(startIndex: number, endIndex: number) {
+  const border = {
+    color: { color: { rgbColor: {} } },
+    width: { magnitude: 1, unit: 'PT' },
+    padding: { magnitude: 4, unit: 'PT' },
+    dashStyle: 'SOLID',
+  };
+  return {
+    updateParagraphStyle: {
+      range: { startIndex, endIndex },
+      paragraphStyle: {
+        alignment: 'END',
+        borderTop: border,
+        borderBottom: border,
+        borderLeft: border,
+        borderRight: border,
+      },
+      fields: 'alignment,borderTop,borderBottom,borderLeft,borderRight',
+    },
+  };
+}
+
 /**
  * Creates the actual Google Doc for a report, in two passes:
  *
  * 1. Insert all the plain-text paragraphs (header block) plus an empty
  *    table — insertTable only creates the grid, it can't seed cell text at
- *    creation time, so cells are filled in a second pass below. Bold styling
- *    is deliberately NOT applied here yet — see the note below.
+ *    creation time, so cells are filled in a second pass below. Column
+ *    widths ARE set here, since they're a table-structure property (not a
+ *    text run style) and don't have the inheritance risk described below.
  * 2. Read the document back to find where each table cell (and the
  *    paragraph Docs auto-inserts right after the table) actually landed,
  *    then insert the footer + all six cells' text, ordered from the largest
  *    index to the smallest (inserting at a later position never shifts the
- *    indices of the earlier ones still queued behind it), followed by the
- *    bold-range styling. Bold is applied LAST, after every insertion, because
- *    Docs makes newly inserted text inherit the style of whatever
- *    immediately precedes the insertion point — bolding the header block
- *    first (before the table/footer existed) made the table headers, table
- *    data, and the entire footer come out bold too.
+ *    indices of the earlier ones still queued behind it), followed by every
+ *    text/paragraph style change. Styling is applied LAST, after every
+ *    insertion, because Docs makes newly inserted text inherit the style of
+ *    whatever immediately precedes the insertion point — styling the header
+ *    block before the table/footer existed made the table headers, table
+ *    data, and the entire footer inherit that styling too (ISS-27/ISS-28).
  */
 export async function generateReportDoc(
   deps: GenerateReportDocDeps,
@@ -42,6 +102,17 @@ export async function generateReportDoc(
   await docs.batchUpdate(documentId, [
     { insertText: { location: { index: 1 }, text: content.headerText } },
     { insertTable: { location: { index: tableInsertIndex }, rows: 2, columns: 3 } },
+    ...TABLE_COLUMN_WIDTHS_PT.map((widthPt, columnIndex) => ({
+      updateTableColumnProperties: {
+        tableStartLocation: { index: tableInsertIndex },
+        columnIndices: [columnIndex],
+        tableColumnProperties: {
+          widthType: 'FIXED_WIDTH',
+          width: { magnitude: widthPt, unit: 'PT' },
+        },
+        fields: 'widthType,width',
+      },
+    })),
   ]);
 
   const doc = await docs.get(documentId);
@@ -68,27 +139,36 @@ export async function generateReportDoc(
     table.tableRows[1]?.tableCells[2],
   ];
 
-  const insertions: Array<{ index: number; text: string }> = [
-    { index: trailingEl.startIndex, text: content.footerText },
+  const insertions: Array<{ index: number; text: string; fontSizePt: number }> = [
+    { index: trailingEl.startIndex, text: content.footerText, fontSizePt: BASE_FONT_PT },
   ];
   cells.forEach((cell, i) => {
     const cellStart = cell?.content[0]?.startIndex;
     if (cellStart === undefined) {
       throw new Error('作業報告書の表セルの取得に失敗しました（想定外のドキュメント構造）');
     }
-    insertions.push({ index: cellStart, text: cellTexts[i] });
+    const fontSizePt = i < 3 ? TABLE_HEADER_FONT_PT : TABLE_DATA_FONT_PT;
+    insertions.push({ index: cellStart, text: cellTexts[i], fontSizePt });
   });
   insertions.sort((a, b) => b.index - a.index);
 
+  const footerBoxAbsolute = {
+    start: trailingEl.startIndex + content.footerBoxRange.start,
+    end: trailingEl.startIndex + content.footerBoxRange.end,
+  };
+
   await docs.batchUpdate(documentId, [
     ...insertions.map((i) => ({ insertText: { location: { index: i.index }, text: i.text } })),
-    ...content.headerBoldRanges.map((r) => ({
-      updateTextStyle: {
-        range: { startIndex: 1 + r.start, endIndex: 1 + r.end },
-        textStyle: { bold: true },
-        fields: 'bold',
-      },
-    })),
+    // Base size for the whole header block first, then the narrower
+    // title/total-line overrides after so they win where ranges overlap.
+    fontSizeRequest(1, tableInsertIndex, BASE_FONT_PT),
+    ...content.headerFontSizeRanges.map((r) =>
+      fontSizeRequest(1 + r.range.start, 1 + r.range.end, r.pointSize),
+    ),
+    ...content.headerBoldRanges.map((r) => boldRequest(1 + r.start, 1 + r.end)),
+    ...content.headerRightAlignRanges.map((r) => rightAlignRequest(1 + r.start, 1 + r.end)),
+    ...insertions.map((i) => fontSizeRequest(i.index, i.index + i.text.length, i.fontSizePt)),
+    boxBorderRequest(footerBoxAbsolute.start, footerBoxAbsolute.end),
   ]);
 
   if (folderId) {

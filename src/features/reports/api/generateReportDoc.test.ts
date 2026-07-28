@@ -6,11 +6,14 @@ import type { ReportDocContent } from '../reportData';
 
 const CONTENT: ReportDocContent = {
   title: '作業報告書_案件A_2026年6月',
-  headerText: 'header-block-text',
+  headerText: 'header-block-text', // 17 chars — "header"(0-6) + "-block-text"
   headerBoldRanges: [{ start: 0, end: 6 }],
+  headerFontSizeRanges: [{ range: { start: 0, end: 6 }, pointSize: 16 }],
+  headerRightAlignRanges: [{ start: 7, end: 12 }], // "block"
   tableHeaderCells: ['No.', 'アクティビティ', '作業実績'],
   tableDataCells: ['1', '案件A', '・週次MTGへの参加'],
-  footerText: 'footer-block-text',
+  footerText: 'footer-block-text', // 17 chars, same shape as headerText
+  footerBoxRange: { start: 7, end: 12 }, // "block"
 };
 
 function fakeDocAfterTableInsert(): DocDocument {
@@ -80,21 +83,44 @@ function createMockDrive(): DriveClient & { moved: Array<{ fileId: string; folde
 }
 
 describe('generateReportDoc', () => {
-  it('inserts the header block and an empty table in the first batchUpdate — no bold styling yet', async () => {
+  it('inserts the header block, an empty table, and the column widths in the first batchUpdate — no text styling yet', async () => {
     const docs = createMockDocs();
     const drive = createMockDrive();
     await generateReportDoc({ docs, drive }, CONTENT, 'folder-1');
 
     const first = docs.batchCalls[0] as Array<Record<string, unknown>>;
-    expect(first).toEqual([
-      { insertText: { location: { index: 1 }, text: 'header-block-text' } },
-      {
-        insertTable: { location: { index: 1 + 'header-block-text'.length }, rows: 2, columns: 3 },
-      },
+    const tableInsertIndex = 1 + 'header-block-text'.length;
+    expect(first[0]).toEqual({
+      insertText: { location: { index: 1 }, text: 'header-block-text' },
+    });
+    expect(first[1]).toEqual({
+      insertTable: { location: { index: tableInsertIndex }, rows: 2, columns: 3 },
+    });
+    const columnRequests = first.slice(2) as Array<{
+      updateTableColumnProperties: {
+        tableStartLocation: { index: number };
+        columnIndices: number[];
+        tableColumnProperties: { width: { magnitude: number } };
+      };
+    }>;
+    expect(columnRequests.map((r) => r.updateTableColumnProperties.columnIndices)).toEqual([
+      [0],
+      [1],
+      [2],
     ]);
+    expect(
+      columnRequests.map(
+        (r) => r.updateTableColumnProperties.tableColumnProperties.width.magnitude,
+      ),
+    ).toEqual([29.2, 132.7, 326]);
+    expect(
+      columnRequests.every(
+        (r) => r.updateTableColumnProperties.tableStartLocation.index === tableInsertIndex,
+      ),
+    ).toBe(true);
   });
 
-  it('fills the footer and all six cells in the second batchUpdate, ordered from the largest index down, then bolds the header ranges last', async () => {
+  it('fills the footer and all six cells in the second batchUpdate, ordered from the largest index down, styling last', async () => {
     const docs = createMockDocs();
     const drive = createMockDrive();
     await generateReportDoc({ docs, drive }, CONTENT, 'folder-1');
@@ -117,13 +143,125 @@ describe('generateReportDoc', () => {
     expect(byIndex.get(91)).toBe('案件A');
     expect(byIndex.get(101)).toBe('・週次MTGへの参加');
 
-    // Bold styling is applied last — after every insertion — so nothing
-    // subsequently inserted can inherit it (the bug this regression guards).
-    expect(second[second.length - 1]).toEqual({
+    // All insertText requests come first (as a contiguous block), everything
+    // after them is styling — applied last so nothing subsequently inserted
+    // can inherit it (the bug this regression guards, see ISS-27).
+    expect(second.slice(0, insertions.length).every((r) => 'insertText' in r)).toBe(true);
+    expect(second.slice(insertions.length).every((r) => !('insertText' in r))).toBe(true);
+  });
+
+  it('applies the base font size to the whole header block, then overrides the title/total-line ranges', async () => {
+    const docs = createMockDocs();
+    const drive = createMockDrive();
+    await generateReportDoc({ docs, drive }, CONTENT, 'folder-1');
+
+    const second = docs.batchCalls[1] as Array<Record<string, unknown>>;
+    const fontSizeRequests = second.filter(
+      (
+        r,
+      ): r is {
+        updateTextStyle: {
+          range: { startIndex: number; endIndex: number };
+          textStyle: { fontSize?: { magnitude: number } };
+        };
+      } =>
+        'updateTextStyle' in r &&
+        !!(r as { updateTextStyle: { textStyle?: { fontSize?: unknown } } }).updateTextStyle
+          .textStyle?.fontSize,
+    );
+    // Base size over the whole header block (index 1 .. tableInsertIndex).
+    expect(fontSizeRequests[0]).toEqual({
+      updateTextStyle: {
+        range: { startIndex: 1, endIndex: 1 + 'header-block-text'.length },
+        textStyle: { fontSize: { magnitude: 12, unit: 'PT' } },
+        fields: 'fontSize',
+      },
+    });
+    // Title override (start 0, end 6 within headerText -> absolute 1..7) at 16pt.
+    expect(fontSizeRequests[1]).toEqual({
+      updateTextStyle: {
+        range: { startIndex: 1, endIndex: 7 },
+        textStyle: { fontSize: { magnitude: 16, unit: 'PT' } },
+        fields: 'fontSize',
+      },
+    });
+  });
+
+  it('bolds only the requested header ranges', async () => {
+    const docs = createMockDocs();
+    const drive = createMockDrive();
+    await generateReportDoc({ docs, drive }, CONTENT, 'folder-1');
+
+    const second = docs.batchCalls[1] as Array<Record<string, unknown>>;
+    expect(second).toContainEqual({
       updateTextStyle: {
         range: { startIndex: 1, endIndex: 7 },
         textStyle: { bold: true },
         fields: 'bold',
+      },
+    });
+  });
+
+  it('right-aligns the report-date and sender-name lines', async () => {
+    const docs = createMockDocs();
+    const drive = createMockDrive();
+    await generateReportDoc({ docs, drive }, CONTENT, 'folder-1');
+
+    const second = docs.batchCalls[1] as Array<Record<string, unknown>>;
+    expect(second).toContainEqual({
+      updateParagraphStyle: {
+        range: { startIndex: 8, endIndex: 13 },
+        paragraphStyle: { alignment: 'END' },
+        fields: 'alignment',
+      },
+    });
+  });
+
+  it('sizes table header cells at 12pt and data cells at 10.5pt', async () => {
+    const docs = createMockDocs();
+    const drive = createMockDrive();
+    await generateReportDoc({ docs, drive }, CONTENT, 'folder-1');
+
+    const second = docs.batchCalls[1] as Array<{
+      updateTextStyle?: {
+        range: { startIndex: number; endIndex: number };
+        textStyle: { fontSize?: { magnitude: number } };
+      };
+    }>;
+    const byStart = new Map(
+      second
+        .filter((r) => r.updateTextStyle?.textStyle.fontSize)
+        .map((r) => [
+          r.updateTextStyle!.range.startIndex,
+          r.updateTextStyle!.textStyle.fontSize!.magnitude,
+        ]),
+    );
+    expect(byStart.get(53)).toBe(12); // "No."
+    expect(byStart.get(56)).toBe(12); // "アクティビティ"
+    expect(byStart.get(61)).toBe(12); // "作業実績"
+    expect(byStart.get(82)).toBe(10.5); // "1"
+    expect(byStart.get(91)).toBe(10.5); // "案件A"
+    expect(byStart.get(101)).toBe(10.5); // activity text
+  });
+
+  it('boxes and right-aligns the 検収印 block (年月日/宛先/担当) at the correct absolute offset', async () => {
+    const docs = createMockDocs();
+    const drive = createMockDrive();
+    await generateReportDoc({ docs, drive }, CONTENT, 'folder-1');
+
+    const second = docs.batchCalls[1] as Array<Record<string, unknown>>;
+    // footer inserted at 120; footerBoxRange {7,12} -> absolute 127..132.
+    expect(second).toContainEqual({
+      updateParagraphStyle: {
+        range: { startIndex: 127, endIndex: 132 },
+        paragraphStyle: expect.objectContaining({
+          alignment: 'END',
+          borderTop: expect.objectContaining({ width: { magnitude: 1, unit: 'PT' } }),
+          borderBottom: expect.anything(),
+          borderLeft: expect.anything(),
+          borderRight: expect.anything(),
+        }),
+        fields: 'alignment,borderTop,borderBottom,borderLeft,borderRight',
       },
     });
   });
