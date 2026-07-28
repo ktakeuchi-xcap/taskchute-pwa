@@ -2,6 +2,7 @@ import { CollapsibleSection } from '@/components/ui/collapsible-section';
 import { ThemePicker } from '@/components/ThemePicker';
 import { CategoryManager } from '@/features/tasks/components/CategoryManager';
 import { RoutineManager } from '@/features/routines/components/RoutineManager';
+import { AccountSection } from '@/features/auth/components/AccountSection';
 
 export function SettingsRoute() {
   return (
@@ -16,9 +17,7 @@ export function SettingsRoute() {
       <CollapsibleSection title="ルーチンタスク">
         <RoutineManager />
       </CollapsibleSection>
-      <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-        同期設定・ログアウトは今後実装予定。
-      </div>
+      <AccountSection />
     </div>
   );
 }
