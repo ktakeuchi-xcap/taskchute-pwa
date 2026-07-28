@@ -313,7 +313,12 @@ export function createAuthClient(clientId: string): AuthClient {
   }
   return new GoogleAuthClient({
     clientId,
-    storage: window.sessionStorage,
+    // localStorage (not sessionStorage) so closing/reopening the tab or PWA
+    // doesn't force a fresh login — the token still expires on its own after
+    // ~1 hour (expiresAt, checked in ensureToken/readStored) regardless of
+    // which storage holds it, so this only removes the "cleared on tab
+    // close" behavior, not the token's actual lifetime.
+    storage: window.localStorage,
     loadGis: loadGoogleIdentityServices,
   });
 }
