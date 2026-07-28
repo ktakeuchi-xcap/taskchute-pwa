@@ -89,9 +89,11 @@ describe('generateReportDoc', () => {
     await generateReportDoc({ docs, drive }, CONTENT, 'folder-1');
 
     const first = docs.batchCalls[0] as Array<Record<string, unknown>>;
-    const tableInsertIndex = 1 + 'header-block-text'.length;
+    // A trailing "\n" is added so the table starts a fresh paragraph — Docs
+    // rejects insertTable at a mid-paragraph location with a 400.
+    const tableInsertIndex = 1 + 'header-block-text'.length + 1;
     expect(first[0]).toEqual({
-      insertText: { location: { index: 1 }, text: 'header-block-text' },
+      insertText: { location: { index: 1 }, text: 'header-block-text\n' },
     });
     expect(first[1]).toEqual({
       insertTable: { location: { index: tableInsertIndex }, rows: 2, columns: 3 },
@@ -169,10 +171,11 @@ describe('generateReportDoc', () => {
         !!(r as { updateTextStyle: { textStyle?: { fontSize?: unknown } } }).updateTextStyle
           .textStyle?.fontSize,
     );
-    // Base size over the whole header block (index 1 .. tableInsertIndex).
+    // Base size over the whole header block (index 1 .. tableInsertIndex,
+    // which includes the extra trailing "\n").
     expect(fontSizeRequests[0]).toEqual({
       updateTextStyle: {
-        range: { startIndex: 1, endIndex: 1 + 'header-block-text'.length },
+        range: { startIndex: 1, endIndex: 1 + 'header-block-text'.length + 1 },
         textStyle: { fontSize: { magnitude: 12, unit: 'PT' } },
         fields: 'fontSize',
       },

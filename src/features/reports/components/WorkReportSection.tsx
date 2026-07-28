@@ -11,6 +11,7 @@ import {
   listCompletedTasksForCategory,
 } from '@/features/reports/reportData';
 import { formatJst } from '@/lib/time/jst';
+import { describeError } from '@/lib/google/errors';
 
 /**
  * Two-step report generation (see docs/260708_課題要求管理表_v1.md REQ-56):
@@ -73,7 +74,7 @@ export function WorkReportSection() {
       const doc = await generateMutation.mutateAsync({ content, folderId: setting.folderId });
       setResult({ url: doc.url });
     } catch (err) {
-      setError(`作成に失敗しました：${err instanceof Error ? err.message : String(err)}`);
+      setError(`作成に失敗しました：${describeError(err)}`);
     }
   };
 

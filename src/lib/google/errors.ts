@@ -37,3 +37,27 @@ export class GoogleApiError extends Error {
     this.body = body;
   }
 }
+
+/**
+ * GoogleApiError's own .message only ever contains status/statusText/endpoint
+ * — the actual reason Google rejected the request lives in .body, which this
+ * pulls out so error banners can show it instead of a bare "400" (see ISS-24,
+ * where this exact gap hid the real cause of a sync failure for a long time).
+ */
+function extractGoogleApiErrorDetail(body: unknown): string | null {
+  if (typeof body === 'string') return body;
+  if (body && typeof body === 'object' && 'error' in body) {
+    return (body as { error?: { message?: string } }).error?.message ?? JSON.stringify(body);
+  }
+  if (body) return JSON.stringify(body);
+  return null;
+}
+
+/** Formats any caught error for display, including Google's own detail message when available. */
+export function describeError(err: unknown): string {
+  if (err instanceof GoogleApiError) {
+    const detail = extractGoogleApiErrorDetail(err.body);
+    return `${err.message}${detail ? ` — ${detail}` : ''}`;
+  }
+  return err instanceof Error ? err.message : String(err);
+}

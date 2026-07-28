@@ -5,29 +5,10 @@ import { useUIStore, type Tab } from '@/store/uiStore';
 import { formatJst, WEEKDAY_JA } from '@/lib/time/jst';
 import { useAutoSync } from '@/features/sync/useAutoSync';
 import type { SyncSummary } from '@/features/sync/useSync';
-import { GoogleApiError } from '@/lib/google/errors';
+import { describeError } from '@/lib/google/errors';
 
-/**
- * GoogleApiError's own `.message` is just "Google API {status} at {url}" —
- * it never included *why* (Google's response body, e.g. "Invalid value at
- * 'data.values[12][3]'..."), which was the missing piece that made a real
- * 400 on TaskDB:append (ISS-24's remaining mystery) show up as an
- * uninformative error with no way to tell what Google actually objected to.
- */
 function formatSyncError(err: unknown): string {
-  if (err instanceof GoogleApiError) {
-    const body = err.body;
-    const detail =
-      typeof body === 'string'
-        ? body
-        : body && typeof body === 'object' && 'error' in body
-          ? ((body as { error?: { message?: string } }).error?.message ?? JSON.stringify(body))
-          : body
-            ? JSON.stringify(body)
-            : null;
-    return `同期失敗: ${err.message}${detail ? ` — ${detail}` : ''}`;
-  }
-  return `同期失敗: ${err instanceof Error ? err.message : String(err)}`;
+  return `同期失敗: ${describeError(err)}`;
 }
 
 function formatSyncSuccess(result: SyncSummary): string {

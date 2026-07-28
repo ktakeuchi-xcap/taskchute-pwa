@@ -98,9 +98,16 @@ export async function generateReportDoc(
   const { docs, drive } = deps;
   const { documentId } = await docs.create(content.title);
 
-  const tableInsertIndex = 1 + content.headerText.length;
+  // headerText has no trailing "\n", so without this, insertTable's location
+  // would land mid-paragraph (merged into the still-open final paragraph of
+  // the fresh document) instead of at a paragraph boundary — Docs rejects
+  // that with a 400. The extra "\n" gives the table its own fresh paragraph
+  // to start at; it isn't part of headerText itself, so none of the
+  // style ranges computed against headerText's own length are affected.
+  const headerBlock = content.headerText + '\n';
+  const tableInsertIndex = 1 + headerBlock.length;
   await docs.batchUpdate(documentId, [
-    { insertText: { location: { index: 1 }, text: content.headerText } },
+    { insertText: { location: { index: 1 }, text: headerBlock } },
     { insertTable: { location: { index: tableInsertIndex }, rows: 2, columns: 3 } },
     ...TABLE_COLUMN_WIDTHS_PT.map((widthPt, columnIndex) => ({
       updateTableColumnProperties: {
