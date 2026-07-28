@@ -11,6 +11,7 @@ import { useUIStore } from '@/store/uiStore';
 import { isAllDayMeeting } from '@/features/tasks/meetingStatus';
 import { TaskSource, TaskStatus } from '@/features/tasks/types';
 import { DAILY_CAPACITY_MINUTES } from '@/features/tasks/workload';
+import { WorkReportSection } from '@/features/reports/components/WorkReportSection';
 import {
   aggregateDailyByCategory,
   aggregateDailyTotals,
@@ -347,6 +348,14 @@ export function DashboardRoute() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* 作業報告書 */}
+      <div className="rounded-lg border border-border bg-card p-3">
+        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          作業報告書を作成
+        </h3>
+        <WorkReportSection />
       </div>
     </div>
   );

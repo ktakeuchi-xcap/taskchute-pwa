@@ -36,6 +36,11 @@ export const AUTH_SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/tasks',
+  // 作業報告書のGoogleドキュメント自動作成（REQ-56）で使用。documentsはドキュメント本文の
+  // 作成・編集、driveは生成したファイルをReportSettingsで指定した既存フォルダへ移動するため
+  // （drive.fileスコープだと、アプリが作成していない既存フォルダへの移動が許可されないことがある）。
+  'https://www.googleapis.com/auth/documents',
+  'https://www.googleapis.com/auth/drive',
 ];
 
 export function getScopes(): string {
