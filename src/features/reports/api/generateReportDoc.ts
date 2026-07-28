@@ -76,14 +76,16 @@ function boxBorderRequest(startIndex: number, endIndex: number) {
  *
  * 1. Insert all the plain-text paragraphs (header block) plus an empty
  *    table — insertTable only creates the grid, it can't seed cell text at
- *    creation time, so cells are filled in a second pass below. Column
- *    widths ARE set here, since they're a table-structure property (not a
- *    text run style) and don't have the inheritance risk described below.
- * 2. Read the document back to find where each table cell (and the
- *    paragraph Docs auto-inserts right after the table) actually landed,
- *    then insert the footer + all six cells' text, ordered from the largest
- *    index to the smallest (inserting at a later position never shifts the
- *    indices of the earlier ones still queued behind it), followed by every
+ *    creation time, so cells are filled in a second pass below.
+ * 2. Read the document back to find where the table (and its cells, and the
+ *    paragraph Docs auto-inserts right after the table) actually landed —
+ *    insertTable's own requested `location` isn't reliable enough to build
+ *    on directly for a later request in the same batch; e.g.
+ *    updateTableColumnProperties rejects a guessed tableStartLocation with
+ *    "table start location is invalid" (ISS-29). Then insert the footer +
+ *    all six cells' text, ordered from the largest index to the smallest
+ *    (inserting at a later position never shifts the indices of the earlier
+ *    ones still queued behind it), followed by the column widths and every
  *    text/paragraph style change. Styling is applied LAST, after every
  *    insertion, because Docs makes newly inserted text inherit the style of
  *    whatever immediately precedes the insertion point — styling the header
@@ -109,17 +111,6 @@ export async function generateReportDoc(
   await docs.batchUpdate(documentId, [
     { insertText: { location: { index: 1 }, text: headerBlock } },
     { insertTable: { location: { index: tableInsertIndex }, rows: 2, columns: 3 } },
-    ...TABLE_COLUMN_WIDTHS_PT.map((widthPt, columnIndex) => ({
-      updateTableColumnProperties: {
-        tableStartLocation: { index: tableInsertIndex },
-        columnIndices: [columnIndex],
-        tableColumnProperties: {
-          widthType: 'FIXED_WIDTH',
-          width: { magnitude: widthPt, unit: 'PT' },
-        },
-        fields: 'widthType,width',
-      },
-    })),
   ]);
 
   const doc = await docs.get(documentId);
@@ -129,9 +120,20 @@ export async function generateReportDoc(
   // continue past it — that auto-inserted paragraph is where the footer goes.
   const trailingEl = doc.body.content[tableArrIndex + 1];
   const table = tableEl?.table;
-  if (!table || !trailingEl || trailingEl.startIndex === undefined) {
+  if (
+    !table ||
+    !trailingEl ||
+    trailingEl.startIndex === undefined ||
+    tableEl.startIndex === undefined
+  ) {
     throw new Error('作業報告書の表構造の取得に失敗しました（想定外のドキュメント構造）');
   }
+  // insertTable's own `location` is where the table is requested to go, but
+  // Docs may insert it at a slightly different actual position (e.g. an
+  // extra leading newline) — updateTableColumnProperties rejects a guessed
+  // location with "table start location is invalid", so this always uses
+  // the table's real, measured startIndex instead of tableInsertIndex.
+  const tableStartIndex = tableEl.startIndex;
 
   const cellTexts: [string, string, string, string, string, string] = [
     ...content.tableHeaderCells,
@@ -166,6 +168,17 @@ export async function generateReportDoc(
 
   await docs.batchUpdate(documentId, [
     ...insertions.map((i) => ({ insertText: { location: { index: i.index }, text: i.text } })),
+    ...TABLE_COLUMN_WIDTHS_PT.map((widthPt, columnIndex) => ({
+      updateTableColumnProperties: {
+        tableStartLocation: { index: tableStartIndex },
+        columnIndices: [columnIndex],
+        tableColumnProperties: {
+          widthType: 'FIXED_WIDTH',
+          width: { magnitude: widthPt, unit: 'PT' },
+        },
+        fields: 'widthType,width',
+      },
+    })),
     // Base size for the whole header block first, then the narrower
     // title/total-line overrides after so they win where ranges overlap.
     fontSizeRequest(1, tableInsertIndex, BASE_FONT_PT),

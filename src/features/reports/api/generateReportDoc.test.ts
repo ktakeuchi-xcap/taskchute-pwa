@@ -83,7 +83,7 @@ function createMockDrive(): DriveClient & { moved: Array<{ fileId: string; folde
 }
 
 describe('generateReportDoc', () => {
-  it('inserts the header block, an empty table, and the column widths in the first batchUpdate — no text styling yet', async () => {
+  it('inserts only the header block and an empty table in the first batchUpdate — no styling, no guessed table location yet', async () => {
     const docs = createMockDocs();
     const drive = createMockDrive();
     await generateReportDoc({ docs, drive }, CONTENT, 'folder-1');
@@ -92,19 +92,29 @@ describe('generateReportDoc', () => {
     // A trailing "\n" is added so the table starts a fresh paragraph — Docs
     // rejects insertTable at a mid-paragraph location with a 400.
     const tableInsertIndex = 1 + 'header-block-text'.length + 1;
-    expect(first[0]).toEqual({
-      insertText: { location: { index: 1 }, text: 'header-block-text\n' },
-    });
-    expect(first[1]).toEqual({
-      insertTable: { location: { index: tableInsertIndex }, rows: 2, columns: 3 },
-    });
-    const columnRequests = first.slice(2) as Array<{
-      updateTableColumnProperties: {
-        tableStartLocation: { index: number };
-        columnIndices: number[];
-        tableColumnProperties: { width: { magnitude: number } };
-      };
-    }>;
+    expect(first).toEqual([
+      { insertText: { location: { index: 1 }, text: 'header-block-text\n' } },
+      { insertTable: { location: { index: tableInsertIndex }, rows: 2, columns: 3 } },
+    ]);
+  });
+
+  it("sets the table column widths in the second batchUpdate, using the table's measured startIndex (not the requested insertTable location)", async () => {
+    const docs = createMockDocs();
+    const drive = createMockDrive();
+    await generateReportDoc({ docs, drive }, CONTENT, 'folder-1');
+
+    const second = docs.batchCalls[1] as Array<Record<string, unknown>>;
+    const columnRequests = second.filter(
+      (
+        r,
+      ): r is {
+        updateTableColumnProperties: {
+          tableStartLocation: { index: number };
+          columnIndices: number[];
+          tableColumnProperties: { width: { magnitude: number } };
+        };
+      } => 'updateTableColumnProperties' in r,
+    );
     expect(columnRequests.map((r) => r.updateTableColumnProperties.columnIndices)).toEqual([
       [0],
       [1],
@@ -115,10 +125,10 @@ describe('generateReportDoc', () => {
         (r) => r.updateTableColumnProperties.tableColumnProperties.width.magnitude,
       ),
     ).toEqual([29.2, 132.7, 326]);
+    // 50 is the mock's table startIndex (fakeDocAfterTableInsert) — distinct
+    // from the requested insertTable location, on purpose (see ISS-29).
     expect(
-      columnRequests.every(
-        (r) => r.updateTableColumnProperties.tableStartLocation.index === tableInsertIndex,
-      ),
+      columnRequests.every((r) => r.updateTableColumnProperties.tableStartLocation.index === 50),
     ).toBe(true);
   });
 
