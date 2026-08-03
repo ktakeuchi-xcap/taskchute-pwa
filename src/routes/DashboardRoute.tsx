@@ -77,9 +77,10 @@ export function DashboardRoute() {
     [tasks, todayKey],
   );
   const todaysDoneCount = todaysTasks.filter((t) => t.status === TaskStatus.Done).length;
-  const current =
-    tasks.find((t) => t.source !== TaskSource.Meeting && t.status === TaskStatus.InProgress) ??
-    null;
+  // Multiple manual tasks can be in progress at once (parallel execution).
+  const currentTasks = tasks.filter(
+    (t) => t.source !== TaskSource.Meeting && t.status === TaskStatus.InProgress,
+  );
   // Merges tasks and meetings — matches TodayRoute's "next up" slot, which
   // shows whichever is chronologically first regardless of source. All-day
   // meetings have no real "next up" moment, so they're excluded.
@@ -145,9 +146,13 @@ export function DashboardRoute() {
           今日の進捗
         </h3>
         <p className="mt-1 text-sm">
-          {current ? (
+          {currentTasks.length > 0 ? (
             <>
-              進行中：<span className="font-medium">{current.taskName}</span>
+              進行中：
+              <span className="font-medium">
+                {currentTasks[0]!.taskName}
+                {currentTasks.length > 1 ? ` 他${currentTasks.length - 1}件` : ''}
+              </span>
             </>
           ) : next ? (
             <>

@@ -10,10 +10,9 @@ interface NextTaskCardProps {
   task: Task | null;
   onStart: () => void;
   isPending: boolean;
-  startDisabled: boolean;
 }
 
-export function NextTaskCard({ task, onStart, isPending, startDisabled }: NextTaskCardProps) {
+export function NextTaskCard({ task, onStart, isPending }: NextTaskCardProps) {
   const categoryColorMap = useCategoryColorMap();
   if (!task) {
     return (
@@ -35,7 +34,7 @@ export function NextTaskCard({ task, onStart, isPending, startDisabled }: NextTa
       <p className="mt-1 text-xs text-muted-foreground">
         予定: {formatJst(task.scheduledStartTime, 'M/d HH:mm')} ・ {task.estimateMinutes}分
       </p>
-      <Button className="mt-4 w-full" onClick={onStart} disabled={isPending || startDisabled}>
+      <Button className="mt-4 w-full" onClick={onStart} disabled={isPending}>
         ▶ 次を開始
       </Button>
     </Card>

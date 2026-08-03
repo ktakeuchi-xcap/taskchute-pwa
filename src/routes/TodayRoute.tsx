@@ -19,7 +19,7 @@ function partition(tasks: Task[]): {
   todays: Task[];
   activeTasks: Task[];
   doneTasks: Task[];
-  current: Task | null;
+  currentTasks: Task[];
   currentMeeting: Task | null;
   next: Task | null;
   allDoneToday: boolean;
@@ -29,10 +29,12 @@ function partition(tasks: Task[]): {
   const activeTasks = todays.filter((t) => t.status !== TaskStatus.Done);
   const doneTasks = todays.filter((t) => t.status === TaskStatus.Done);
   // Meetings run on the calendar's own clock (see meetingStatus.ts) and never
-  // take over the single manual-task spotlight below — they get their own
-  // separate timer display instead (CurrentMeetingCard).
+  // join the manual-task spotlight below — they get their own separate timer
+  // display instead (CurrentMeetingCard). Multiple manual tasks can run at
+  // once (parallel execution), so this is every in-progress one, not just
+  // the first.
   const manualTasks = tasks.filter((t) => t.source !== TaskSource.Meeting);
-  const current = manualTasks.find((t) => t.status === TaskStatus.InProgress) ?? null;
+  const currentTasks = manualTasks.filter((t) => t.status === TaskStatus.InProgress);
   const currentMeeting =
     tasks.find((t) => t.source === TaskSource.Meeting && t.status === TaskStatus.InProgress) ??
     null;
@@ -40,7 +42,7 @@ function partition(tasks: Task[]): {
   // is finished — a day with nothing scheduled yet is a different state (see
   // the emptyMessage branches below) and should still be able to peek ahead.
   const allDoneToday = todays.length > 0 && activeTasks.length === 0;
-  // Unlike `current` above, "next up" merges tasks and meetings into one
+  // Unlike `currentTasks` above, "next up" merges tasks and meetings into one
   // slot — whichever is chronologically first gets shown there (see
   // NextMeetingCard for the meeting case, which has no start button since
   // meetings begin themselves). All-day meetings have no real "next up"
@@ -53,7 +55,7 @@ function partition(tasks: Task[]): {
     : (todays.find((t) => t.status === TaskStatus.NotStarted && !isAllDayMeeting(t)) ??
       tasks.find((t) => t.status === TaskStatus.NotStarted && !isAllDayMeeting(t)) ??
       null);
-  return { todays, activeTasks, doneTasks, current, currentMeeting, next, allDoneToday };
+  return { todays, activeTasks, doneTasks, currentTasks, currentMeeting, next, allDoneToday };
 }
 
 export function TodayRoute() {
@@ -64,7 +66,7 @@ export function TodayRoute() {
 
   const waitingQuery = useWaitingTasks();
 
-  const { activeTasks, doneTasks, current, currentMeeting, next, allDoneToday } = useMemo(
+  const { activeTasks, doneTasks, currentTasks, currentMeeting, next, allDoneToday } = useMemo(
     () => partition(tasksQuery.data ?? []),
     [tasksQuery.data],
   );
@@ -108,11 +110,18 @@ export function TodayRoute() {
             <AllDoneCard />
           ) : (
             <>
-              <CurrentTaskCard
-                task={current}
-                onEnd={() => current && endMutation.mutate(current.taskId)}
-                isPending={endMutation.isPending}
-              />
+              {currentTasks.length > 0 ? (
+                currentTasks.map((task) => (
+                  <CurrentTaskCard
+                    key={task.taskId}
+                    task={task}
+                    onEnd={() => endMutation.mutate(task.taskId)}
+                    isPending={endMutation.isPending}
+                  />
+                ))
+              ) : (
+                <CurrentTaskCard task={null} onEnd={() => {}} isPending={false} />
+              )}
               {next && next.source === TaskSource.Meeting ? (
                 <NextMeetingCard task={next} />
               ) : (
@@ -120,7 +129,6 @@ export function TodayRoute() {
                   task={next}
                   onStart={() => next && startMutation.mutate(next.taskId)}
                   isPending={startMutation.isPending}
-                  startDisabled={current !== null}
                 />
               )}
             </>
