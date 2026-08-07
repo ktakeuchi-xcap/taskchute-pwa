@@ -7,7 +7,12 @@ import { listMeetingRules } from '@/features/tasks/api/meetingCategoryRules';
 import { formatDateForSheet } from '@/lib/google/sheetDate';
 import { TaskSource, TaskStatus, type Task } from '@/features/tasks/types';
 
-const SYNC_WINDOW_DAYS = 15;
+// Asymmetric on purpose — see the identical constants/reasoning in
+// syncCalendarToSheet.ts (ISS-30): a narrow forward window means meetings
+// scheduled beyond it stay invisible until the user reopens the app and a
+// fresh sync re-centers the window on "now".
+const SYNC_WINDOW_DAYS_PAST = 15;
+const SYNC_WINDOW_DAYS_FUTURE = 30;
 const SOURCE_HEADER = 'Source';
 
 // A legitimate "vanished from Calendar" batch (declined/cancelled meetings)
@@ -33,7 +38,7 @@ export interface SyncMeetingsResult {
   updatedCount: number;
   deletedCount: number;
   /**
-   * Raw count of events the Calendar API returned for the ±15d window,
+   * Raw count of events the Calendar API returned for the sync window,
    * before the self-declined filter — surfaced end-to-end (see useSync.ts,
    * AppShell.tsx) so a "nothing added/updated" result is distinguishable
    * from "the calendar fetch itself came back empty" without needing to
@@ -125,8 +130,8 @@ export async function syncMeetingsToSheet(deps: SyncMeetingsDeps): Promise<SyncM
   const { sheets, calendar, spreadsheetId, meetingCalendarId } = deps;
   const now = (deps.now ?? (() => new Date()))();
   const generateId = deps.generateId ?? defaultGenerateId;
-  const windowStart = addDays(now, -SYNC_WINDOW_DAYS);
-  const windowEnd = addDays(now, SYNC_WINDOW_DAYS);
+  const windowStart = addDays(now, -SYNC_WINDOW_DAYS_PAST);
+  const windowEnd = addDays(now, SYNC_WINDOW_DAYS_FUTURE);
 
   const [sheetValuesInitial, events] = await Promise.all([
     sheets.getValues(spreadsheetId, TASKDB_SHEET),

@@ -6,7 +6,16 @@ import { parseEventTitle, parseTaskDbRows } from '@/features/tasks/api/serialize
 import { formatDateForSheet } from '@/lib/google/sheetDate';
 import { TaskSource, TaskStatus } from '@/features/tasks/types';
 
-const SYNC_WINDOW_DAYS = 15;
+// Asymmetric on purpose: how far back matters for reconciling recent edits/
+// completions, but how far forward matters for "can I see next week's
+// commitments" — and since this window only re-centers on "now" each time a
+// sync actually runs, a narrow forward window means anything scheduled
+// beyond it simply stays invisible until the user reopens the app again
+// (ISS-30: events 12+ days out were missing because the last sync had run
+// ~2 weeks earlier, so its ±15d window hadn't reached them yet). A generous
+// forward window shrinks that "stale until next sync" gap.
+const SYNC_WINDOW_DAYS_PAST = 15;
+const SYNC_WINDOW_DAYS_FUTURE = 30;
 
 // A legitimate "the user deleted this on Calendar" batch is normally a
 // handful of rows at most. A count this large almost certainly means the
@@ -53,8 +62,8 @@ function columnLetter(col1Based: number): string {
 }
 
 /**
- * Pull recent (±15d) Calendar events and reconcile any title / time changes
- * back into the TaskDB sheet.
+ * Pull recent/upcoming (-15d..+30d) Calendar events and reconcile any title /
+ * time changes back into the TaskDB sheet.
  *
  * Status=Done rows are handled differently: `endTask` already patches the
  * Calendar event's start/end to the *actual* execution times, so a manual
@@ -65,7 +74,7 @@ function columnLetter(col1Based: number): string {
  *
  * Also detects tasks whose linked Calendar event was deleted on the Calendar
  * side and removes the matching TaskDB row to match. This is only checked for
- * tasks whose own occurrence time falls inside the ±15d query window — a task
+ * tasks whose own occurrence time falls inside the query window — a task
  * scheduled further out simply won't appear in `events` regardless of whether
  * its Calendar event still exists, so treating that as "deleted" would be a
  * false positive.
@@ -73,8 +82,8 @@ function columnLetter(col1Based: number): string {
 export async function syncCalendarToSheet(deps: SyncCalendarDeps): Promise<SyncCalendarResult> {
   const { sheets, calendar, spreadsheetId, calendarId } = deps;
   const now = (deps.now ?? (() => new Date()))();
-  const windowStart = addDays(now, -SYNC_WINDOW_DAYS);
-  const windowEnd = addDays(now, SYNC_WINDOW_DAYS);
+  const windowStart = addDays(now, -SYNC_WINDOW_DAYS_PAST);
+  const windowEnd = addDays(now, SYNC_WINDOW_DAYS_FUTURE);
 
   const [sheetValues, events] = await Promise.all([
     sheets.getValues(spreadsheetId, TASKDB_SHEET),

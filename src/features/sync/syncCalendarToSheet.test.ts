@@ -316,10 +316,11 @@ describe('syncCalendarToSheet', () => {
   });
 
   it('does not delete a row whose occurrence time is outside the sync window', async () => {
-    // Scheduled 30 days from "now" — well outside the ±15d query window, so
-    // its absence from `events` is expected and must not be treated as deletion.
-    const start = new Date('2026-06-24T10:00:00+09:00');
-    const end = new Date('2026-06-24T10:30:00+09:00');
+    // Scheduled 60 days from "now" — well outside the forward query window
+    // (30d), so its absence from `events` is expected and must not be
+    // treated as deletion.
+    const start = new Date('2026-07-24T10:00:00+09:00');
+    const end = new Date('2026-07-24T10:30:00+09:00');
     const sheets = mockSheets([
       HEADER,
       [
@@ -386,5 +387,35 @@ describe('syncCalendarToSheet', () => {
     expect(result.updatedCount).toBe(0);
     expect(sheets.deletedRows).toHaveLength(0);
     expect(sheets.batchUpdates).toHaveLength(0);
+  });
+
+  it('requests a -15d..+30d window from the Calendar API (ISS-30: a symmetric ±15d window went stale for future events whenever the app went unopened for more than ~15 days)', async () => {
+    const calls: Array<{ timeMin: Date; timeMax: Date }> = [];
+    const sheets = mockSheets([HEADER]);
+    const calendar: CalendarClient = {
+      async list(_calendarId, timeMin, timeMax) {
+        calls.push({ timeMin, timeMax });
+        return [];
+      },
+      async insert() {
+        throw new Error('not used');
+      },
+      async patch() {
+        throw new Error('not used');
+      },
+      async delete() {},
+    };
+    const now = new Date('2026-05-25T08:00:00+09:00');
+    await syncCalendarToSheet({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+      now: () => now,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.timeMin.getTime()).toBe(now.getTime() - 15 * 86_400_000);
+    expect(calls[0]!.timeMax.getTime()).toBe(now.getTime() + 30 * 86_400_000);
   });
 });
