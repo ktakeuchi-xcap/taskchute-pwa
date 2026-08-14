@@ -69,6 +69,27 @@ export function aggregateDailyTotals(tasks: Task[], dateKeys: string[]): DailyTo
   return dateKeys.map((dateKey) => ({ dateKey, minutes: totals.get(dateKey) ?? 0 }));
 }
 
+/**
+ * Sum *scheduled* (estimate) minutes per day, for exactly the given list of
+ * "yyyy-MM-dd" keys (JST) — the "見通し" (outlook/forecast) companion to
+ * aggregateDailyTotals. Unlike aggregateDailyTotals, this looks at every
+ * task scheduled that day regardless of Status — a NotStarted/InProgress
+ * task's planned minutes count here even though it has no actual time yet,
+ * which is exactly what makes future days (and today's remaining work)
+ * show a number instead of a flat 0. Still excludes tasks opted out of
+ * workload via countsTowardWorkload, same as actualMinutes/sumEstimateMinutes.
+ */
+export function aggregateDailyEstimatedTotals(tasks: Task[], dateKeys: string[]): DailyTotal[] {
+  const totals = new Map<string, number>(dateKeys.map((key) => [key, 0]));
+  for (const task of tasks) {
+    if (!task.countsTowardWorkload) continue;
+    const key = formatJst(task.scheduledStartTime, 'yyyy-MM-dd');
+    if (!totals.has(key)) continue;
+    totals.set(key, (totals.get(key) ?? 0) + task.estimateMinutes);
+  }
+  return dateKeys.map((dateKey) => ({ dateKey, minutes: totals.get(dateKey) ?? 0 }));
+}
+
 export interface DailyCategoryBreakdown {
   dateKey: string;
   /** Sorted by minutes descending, same shape as aggregateMonthlyByCategory. */

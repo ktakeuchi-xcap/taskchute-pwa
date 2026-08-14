@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   actualMinutes,
   aggregateDailyByCategory,
+  aggregateDailyEstimatedTotals,
   aggregateDailyTotals,
   aggregateMonthlyByCategory,
   toPersonMonths,
@@ -220,5 +221,64 @@ describe('aggregateDailyByCategory', () => {
     ];
     const result = aggregateDailyByCategory(tasks, ['2026-06-05']);
     expect(result).toEqual([{ dateKey: '2026-06-05', categories: [] }]);
+  });
+});
+
+describe('aggregateDailyEstimatedTotals', () => {
+  it('sums estimate minutes per day regardless of Status (unlike aggregateDailyTotals)', () => {
+    const tasks = [
+      makeTask({
+        status: TaskStatus.NotStarted,
+        estimateMinutes: 30,
+        scheduledStartTime: new Date('2026-06-05T09:00:00+09:00'),
+      }),
+      makeTask({
+        status: TaskStatus.InProgress,
+        estimateMinutes: 45,
+        scheduledStartTime: new Date('2026-06-05T14:00:00+09:00'),
+      }),
+      makeTask({
+        status: TaskStatus.Done,
+        estimateMinutes: 20,
+        scheduledStartTime: new Date('2026-06-06T09:00:00+09:00'),
+        actualStartTime: new Date('2026-06-06T09:00:00+09:00'),
+        actualEndTime: new Date('2026-06-06T09:40:00+09:00'), // overran its own estimate
+      }),
+    ];
+    const result = aggregateDailyEstimatedTotals(tasks, ['2026-06-05', '2026-06-06', '2026-06-07']);
+    expect(result).toEqual([
+      { dateKey: '2026-06-05', minutes: 75 },
+      { dateKey: '2026-06-06', minutes: 20 },
+      { dateKey: '2026-06-07', minutes: 0 },
+    ]);
+  });
+
+  it('keys by ScheduledStartTime, not ActualStartTime', () => {
+    const tasks = [
+      makeTask({
+        status: TaskStatus.Done,
+        estimateMinutes: 25,
+        scheduledStartTime: new Date('2026-06-05T09:00:00+09:00'),
+        actualStartTime: new Date('2026-06-06T23:00:00+09:00'), // ran late, into the next day
+        actualEndTime: new Date('2026-06-06T23:20:00+09:00'),
+      }),
+    ];
+    const result = aggregateDailyEstimatedTotals(tasks, ['2026-06-05', '2026-06-06']);
+    expect(result).toEqual([
+      { dateKey: '2026-06-05', minutes: 25 },
+      { dateKey: '2026-06-06', minutes: 0 },
+    ]);
+  });
+
+  it('excludes tasks opted out of workload', () => {
+    const tasks = [
+      makeTask({
+        estimateMinutes: 30,
+        scheduledStartTime: new Date('2026-06-05T09:00:00+09:00'),
+        countsTowardWorkload: false,
+      }),
+    ];
+    const result = aggregateDailyEstimatedTotals(tasks, ['2026-06-05']);
+    expect(result).toEqual([{ dateKey: '2026-06-05', minutes: 0 }]);
   });
 });

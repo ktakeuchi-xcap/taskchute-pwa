@@ -14,6 +14,7 @@ import { DAILY_CAPACITY_MINUTES } from '@/features/tasks/workload';
 import { WorkReportSection } from '@/features/reports/components/WorkReportSection';
 import {
   aggregateDailyByCategory,
+  aggregateDailyEstimatedTotals,
   aggregateDailyTotals,
   aggregateMonthlyByCategory,
   toPersonMonths,
@@ -101,7 +102,17 @@ export function DashboardRoute() {
     () => aggregateDailyByCategory(tasks, trendDateKeys),
     [tasks, trendDateKeys],
   );
-  const maxDailyMinutes = Math.max(1, ...dailyTotals.map((d) => d.minutes));
+  // 見通し（実績とは無関係にその日の予定工数の合計。未完了分も含む）— 実績と
+  // 同じ縦軸スケールで比較できるよう、両方の最大値からバーの上限を決める。
+  const dailyEstimatedTotals = useMemo(
+    () => aggregateDailyEstimatedTotals(tasks, trendDateKeys),
+    [tasks, trendDateKeys],
+  );
+  const maxDailyMinutes = Math.max(
+    1,
+    ...dailyTotals.map((d) => d.minutes),
+    ...dailyEstimatedTotals.map((d) => d.minutes),
+  );
   const trendRangeLabel = `${formatJst(new Date(`${trendDateKeys[0]}T00:00:00+09:00`), 'M/d')}〜${formatJst(new Date(`${trendDateKeys[trendDateKeys.length - 1]}T00:00:00+09:00`), 'M/d')}`;
 
   const monthlyTotals = useMemo(
@@ -213,20 +224,37 @@ export function DashboardRoute() {
             </button>
           </div>
         </div>
-        <div className="mt-4 flex h-20 items-end gap-1">
+        <div className="mt-1.5 flex items-center gap-3 text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <span className="h-2 w-2 rounded-sm bg-muted-foreground/40" />
+            実績
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="h-2 w-2 rounded-sm border border-dashed border-muted-foreground/60" />
+            見通し（予定工数）
+          </span>
+        </div>
+        <div className="mt-3 flex h-20 items-end gap-1">
           {dailyTotals.map((d, i) => {
             const heightPct = Math.max(4, Math.round((d.minutes / maxDailyMinutes) * 100));
             const isToday = d.dateKey === todayKey;
             const pctOfDay = Math.round((d.minutes / DAILY_CAPACITY_MINUTES) * 100);
             const isActive = activeTrendKey === d.dateKey;
             const categories = dailyCategoryBreakdowns[i]?.categories ?? [];
+            const estimatedMinutes = dailyEstimatedTotals[i]?.minutes ?? 0;
+            const estimatedHeightPct = Math.round((estimatedMinutes / maxDailyMinutes) * 100);
+            const estimatedPctOfDay = Math.round((estimatedMinutes / DAILY_CAPACITY_MINUTES) * 100);
             return (
               <div key={d.dateKey} className="relative flex flex-1 flex-col items-center gap-1">
                 {isActive ? (
                   <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 w-max max-w-[45vw] -translate-x-1/2 text-left rounded-md bg-foreground px-2 py-1.5 text-[10px] text-background shadow-md">
                     <div className="whitespace-nowrap font-medium">
-                      {formatJst(new Date(`${d.dateKey}T00:00:00+09:00`), 'M/d')}：{d.minutes}分（
+                      {formatJst(new Date(`${d.dateKey}T00:00:00+09:00`), 'M/d')}：実績{d.minutes}
+                      分（
                       {pctOfDay}%）
+                    </div>
+                    <div className="whitespace-nowrap text-background/80">
+                      見通し：{estimatedMinutes}分（{estimatedPctOfDay}%）
                     </div>
                     {categories.length > 0 ? (
                       <div className="mt-1 space-y-0.5 border-t border-background/20 pt-1">
@@ -251,15 +279,22 @@ export function DashboardRoute() {
                     which never fire hover events. */}
                 <button
                   type="button"
-                  className="flex h-16 w-full items-end"
+                  className="relative flex h-16 w-full items-end"
                   onMouseEnter={() => setActiveTrendKey(d.dateKey)}
                   onMouseLeave={() => setActiveTrendKey((k) => (k === d.dateKey ? null : k))}
                   onClick={() => setActiveTrendKey((k) => (k === d.dateKey ? null : d.dateKey))}
-                  aria-label={`${d.dateKey} ${d.minutes}分（${pctOfDay}%）`}
+                  aria-label={`${d.dateKey} 実績${d.minutes}分（${pctOfDay}%）／見通し${estimatedMinutes}分（${estimatedPctOfDay}%）`}
                 >
+                  {/* 見通し（予定工数）— 実績バーの背後に破線の輪郭だけで重ねる。 */}
+                  {estimatedHeightPct > 0 ? (
+                    <div
+                      className="pointer-events-none absolute inset-x-0 bottom-0 rounded-t border border-dashed border-muted-foreground/60"
+                      style={{ height: `${estimatedHeightPct}%` }}
+                    />
+                  ) : null}
                   <div
                     className={cn(
-                      'flex w-full flex-col-reverse overflow-hidden rounded-t transition-[height]',
+                      'relative flex w-full flex-col-reverse overflow-hidden rounded-t transition-[height]',
                       (!isActive || categories.length === 0) &&
                         (isToday ? 'bg-primary' : 'bg-muted-foreground/40'),
                     )}
