@@ -17,6 +17,7 @@ import {
   aggregateDailyEstimatedTotals,
   aggregateDailyTotals,
   aggregateMonthlyByCategory,
+  aggregateMonthlyEstimatedByCategory,
   toPersonMonths,
 } from '@/features/dashboard/aggregation';
 
@@ -119,8 +120,31 @@ export function DashboardRoute() {
     () => aggregateMonthlyByCategory(tasks, yearMonth),
     [tasks, yearMonth],
   );
+  // 見通し（実績とは無関係にその月に予定されている工数の合計。未完了分も含む）。
+  const monthlyEstimatedTotals = useMemo(
+    () => aggregateMonthlyEstimatedByCategory(tasks, yearMonth),
+    [tasks, yearMonth],
+  );
+  // 実績・見通しのどちらか一方にしか出てこない案件（例：今月まだ実績が無く予定
+  // だけがある案件）も取りこぼさないよう、両方の案件名を合わせた行を作る。
+  const monthlyCategoryRows = useMemo(() => {
+    const actualByCategory = new Map(monthlyTotals.map((c) => [c.category, c.minutes]));
+    const estimatedByCategory = new Map(monthlyEstimatedTotals.map((c) => [c.category, c.minutes]));
+    const categories = new Set([...actualByCategory.keys(), ...estimatedByCategory.keys()]);
+    return [...categories]
+      .map((category) => ({
+        category,
+        actualMinutes: actualByCategory.get(category) ?? 0,
+        estimatedMinutes: estimatedByCategory.get(category) ?? 0,
+      }))
+      .sort((a, b) => b.actualMinutes - a.actualMinutes || b.estimatedMinutes - a.estimatedMinutes);
+  }, [monthlyTotals, monthlyEstimatedTotals]);
   const monthTotalMinutes = monthlyTotals.reduce((sum, c) => sum + c.minutes, 0);
-  const maxCategoryMinutes = Math.max(1, ...monthlyTotals.map((c) => c.minutes));
+  const monthTotalEstimatedMinutes = monthlyEstimatedTotals.reduce((sum, c) => sum + c.minutes, 0);
+  const maxCategoryMinutes = Math.max(
+    1,
+    ...monthlyCategoryRows.map((c) => Math.max(c.actualMinutes, c.estimatedMinutes)),
+  );
 
   if (tasksQuery.isLoading) {
     return (
@@ -350,13 +374,23 @@ export function DashboardRoute() {
           </div>
         </div>
 
-        {monthlyTotals.length === 0 ? (
+        {monthlyCategoryRows.length === 0 ? (
           <p className="mt-3 text-center text-sm text-muted-foreground">
-            {monthLabel}の実績はまだありません
+            {monthLabel}の実績・見通しはまだありません
           </p>
         ) : (
-          <div className="mt-3 space-y-2">
-            {monthlyTotals.map((c) => (
+          <div className="mt-2 space-y-2">
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-sm bg-primary" />
+                実績
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-sm border border-dashed border-muted-foreground/60" />
+                見通し（予定工数）
+              </span>
+            </div>
+            {monthlyCategoryRows.map((c) => (
               <div key={c.category} className="flex items-center gap-2">
                 <span
                   className={cn(
@@ -365,15 +399,28 @@ export function DashboardRoute() {
                   )}
                 />
                 <span className="w-16 flex-shrink-0 truncate text-xs">{c.category}</span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                  {c.estimatedMinutes > 0 ? (
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full border border-dashed border-muted-foreground/60"
+                      style={{
+                        width: `${Math.round((c.estimatedMinutes / maxCategoryMinutes) * 100)}%`,
+                      }}
+                    />
+                  ) : null}
                   <div
-                    className="h-full rounded-full bg-primary transition-[width]"
-                    style={{ width: `${Math.round((c.minutes / maxCategoryMinutes) * 100)}%` }}
+                    className="relative h-full rounded-full bg-primary transition-[width]"
+                    style={{
+                      width: `${Math.round((c.actualMinutes / maxCategoryMinutes) * 100)}%`,
+                    }}
                   />
                 </div>
                 <span className="w-24 flex-shrink-0 text-right text-xs text-muted-foreground">
-                  <span className="block">{formatHoursMinutes(c.minutes)}</span>
-                  <span className="block text-[10px]">{formatPersonMonths(c.minutes)}</span>
+                  <span className="block">{formatHoursMinutes(c.actualMinutes)}</span>
+                  <span className="block text-[10px]">{formatPersonMonths(c.actualMinutes)}</span>
+                  <span className="block text-[10px]">
+                    見通し {formatHoursMinutes(c.estimatedMinutes)}
+                  </span>
                 </span>
               </div>
             ))}
@@ -383,6 +430,9 @@ export function DashboardRoute() {
                 <span className="block">{formatHoursMinutes(monthTotalMinutes)}</span>
                 <span className="block text-[10px] font-normal text-muted-foreground">
                   {formatPersonMonths(monthTotalMinutes)}
+                </span>
+                <span className="block text-[10px] font-normal text-muted-foreground">
+                  見通し {formatHoursMinutes(monthTotalEstimatedMinutes)}
                 </span>
               </span>
             </div>

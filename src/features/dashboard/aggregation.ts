@@ -45,6 +45,31 @@ export function aggregateMonthlyByCategory(
     .sort((a, b) => b.minutes - a.minutes);
 }
 
+/**
+ * Sum *scheduled* (estimate) minutes per category (案件) for `yearMonth`
+ * ("yyyy-MM", JST) — the "見通し" companion to aggregateMonthlyByCategory.
+ * Keyed by ScheduledStartTime (not ActualStartTime) and, like
+ * aggregateDailyEstimatedTotals, includes every task regardless of Status —
+ * NotStarted/InProgress tasks scheduled this month count here even though
+ * they have no actual time yet. Sorted by minutes descending. Still excludes
+ * tasks opted out of workload via countsTowardWorkload.
+ */
+export function aggregateMonthlyEstimatedByCategory(
+  tasks: Task[],
+  yearMonth: string,
+): CategoryMonthlyTotal[] {
+  const totals = new Map<string, number>();
+  for (const task of tasks) {
+    if (!task.countsTowardWorkload) continue;
+    if (formatJst(task.scheduledStartTime, 'yyyy-MM') !== yearMonth) continue;
+    const category = task.category ?? UNCATEGORIZED_LABEL;
+    totals.set(category, (totals.get(category) ?? 0) + task.estimateMinutes);
+  }
+  return [...totals.entries()]
+    .map(([category, minutes]) => ({ category, minutes }))
+    .sort((a, b) => b.minutes - a.minutes);
+}
+
 // 週40時間稼働×4週＝160時間を1人月とする（一般的なSI業界の換算基準）。
 export const MINUTES_PER_PERSON_MONTH = 160 * 60;
 

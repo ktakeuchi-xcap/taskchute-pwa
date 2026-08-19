@@ -5,6 +5,7 @@ import {
   aggregateDailyEstimatedTotals,
   aggregateDailyTotals,
   aggregateMonthlyByCategory,
+  aggregateMonthlyEstimatedByCategory,
   toPersonMonths,
 } from './aggregation';
 import { TaskStatus, type Task } from '@/features/tasks/types';
@@ -221,6 +222,86 @@ describe('aggregateDailyByCategory', () => {
     ];
     const result = aggregateDailyByCategory(tasks, ['2026-06-05']);
     expect(result).toEqual([{ dateKey: '2026-06-05', categories: [] }]);
+  });
+});
+
+describe('aggregateMonthlyEstimatedByCategory', () => {
+  it('sums estimate minutes per category for the given month regardless of Status', () => {
+    const tasks = [
+      makeTask({
+        category: '案件A',
+        status: TaskStatus.NotStarted,
+        estimateMinutes: 30,
+        scheduledStartTime: new Date('2026-06-05T09:00:00+09:00'),
+      }),
+      makeTask({
+        category: '案件A',
+        status: TaskStatus.Done,
+        estimateMinutes: 20,
+        scheduledStartTime: new Date('2026-06-10T09:00:00+09:00'),
+        actualStartTime: new Date('2026-06-10T09:00:00+09:00'),
+        actualEndTime: new Date('2026-06-10T10:00:00+09:00'), // overran its own estimate
+      }),
+      makeTask({
+        category: '案件B',
+        status: TaskStatus.InProgress,
+        estimateMinutes: 15,
+        scheduledStartTime: new Date('2026-06-15T09:00:00+09:00'),
+      }),
+      // Different month — must be excluded.
+      makeTask({
+        category: '案件A',
+        estimateMinutes: 60,
+        scheduledStartTime: new Date('2026-07-01T09:00:00+09:00'),
+      }),
+    ];
+    const result = aggregateMonthlyEstimatedByCategory(tasks, '2026-06');
+    expect(result).toEqual([
+      { category: '案件A', minutes: 50 },
+      { category: '案件B', minutes: 15 },
+    ]);
+  });
+
+  it('keys by ScheduledStartTime, not ActualStartTime', () => {
+    const tasks = [
+      makeTask({
+        category: '案件A',
+        status: TaskStatus.Done,
+        estimateMinutes: 25,
+        scheduledStartTime: new Date('2026-06-30T09:00:00+09:00'),
+        actualStartTime: new Date('2026-07-01T09:00:00+09:00'), // ran late, into next month
+        actualEndTime: new Date('2026-07-01T09:20:00+09:00'),
+      }),
+    ];
+    expect(aggregateMonthlyEstimatedByCategory(tasks, '2026-06')).toEqual([
+      { category: '案件A', minutes: 25 },
+    ]);
+    expect(aggregateMonthlyEstimatedByCategory(tasks, '2026-07')).toEqual([]);
+  });
+
+  it('groups uncategorized tasks under the fallback label', () => {
+    const tasks = [
+      makeTask({
+        category: null,
+        estimateMinutes: 20,
+        scheduledStartTime: new Date('2026-06-05T09:00:00+09:00'),
+      }),
+    ];
+    expect(aggregateMonthlyEstimatedByCategory(tasks, '2026-06')).toEqual([
+      { category: '未分類', minutes: 20 },
+    ]);
+  });
+
+  it('excludes tasks opted out of workload', () => {
+    const tasks = [
+      makeTask({
+        category: '案件A',
+        estimateMinutes: 30,
+        scheduledStartTime: new Date('2026-06-05T09:00:00+09:00'),
+        countsTowardWorkload: false,
+      }),
+    ];
+    expect(aggregateMonthlyEstimatedByCategory(tasks, '2026-06')).toEqual([]);
   });
 });
 
