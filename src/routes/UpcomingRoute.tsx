@@ -43,10 +43,16 @@ function DayButton({ date, dateKey, active, dayMinutes, scaleMinutes, onSelect }
   const pct = Math.round((dayMinutes / DAILY_CAPACITY_MINUTES) * 100);
   const overCapacity = dayMinutes > DAILY_CAPACITY_MINUTES;
   const barHeightPct = Math.min(100, Math.round((dayMinutes / scaleMinutes) * 100));
-  // 1日の許容量(480分=8時間)＝100%の高さ位置。週全体で同じscaleMinutesを使う
-  // ため、この線はどの日のバーでも同じ高さに揃い、それを超えている日の
-  // バーだけが線より上まで伸びる。
-  const capacityLinePct = Math.min(100, Math.round((DAILY_CAPACITY_MINUTES / scaleMinutes) * 100));
+  // 1日の許容量(480分=8時間)＝100%の高さ位置（コンテナ上端からの距離%）。
+  // 週全体で同じscaleMinutesを使うため、この線はどの日のバーでも同じ高さに
+  // 揃い、それを超えている日のバーだけが線より上まで伸びる。
+  // 「bottom:100%」で表現すると、どの日も超過していない通常時（線が天井＝
+  // 100%の位置）は要素自体がコンテナの外（真上）にはみ出し、overflow-hidden
+  // でクリップされて見えなくなるため、top基準（0%＝天井）で位置指定する。
+  const capacityLineTopPct = Math.max(
+    0,
+    100 - Math.round((DAILY_CAPACITY_MINUTES / scaleMinutes) * 100),
+  );
   // JST-safe day-of-week (0=Sun..6=Sat, matching WEEKDAY_JA/getDay's own
   // convention) — date.getDay() reads the runtime's local timezone, which
   // only happens to agree with JST when the device itself is set to Japan.
@@ -95,7 +101,7 @@ function DayButton({ date, dateKey, active, dayMinutes, scaleMinutes, onSelect }
         />
         <div
           className="pointer-events-none absolute inset-x-0 border-t-2 border-destructive/70"
-          style={{ bottom: `${capacityLinePct}%` }}
+          style={{ top: `${capacityLineTopPct}%` }}
         />
       </div>
     </button>
