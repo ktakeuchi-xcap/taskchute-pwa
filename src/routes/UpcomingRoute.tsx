@@ -58,37 +58,43 @@ function DayButton({ date, dateKey, active, dayMinutes, scaleMinutes, onSelect }
       type="button"
       onClick={onSelect}
       className={cn(
-        'flex h-24 flex-1 flex-col items-center justify-between rounded-lg border p-1 text-xs transition-colors',
-        active
-          ? 'border-primary bg-primary text-primary-foreground'
-          : 'border-border bg-card text-foreground hover:bg-accent',
+        'flex flex-1 flex-col items-center gap-1 rounded-lg border p-1.5 text-xs transition-colors',
+        active ? 'border-primary bg-primary/10' : 'border-border bg-card hover:bg-accent',
         isOver && 'ring-2 ring-primary ring-offset-1',
       )}
     >
-      <span className="flex flex-col items-center">
-        <span
-          className={cn(
-            'text-[10px]',
-            !active && jstDow === 0 && 'text-destructive',
-            !active && jstDow === 6 && 'text-blue-600',
-          )}
-        >
-          {WEEKDAY_JA[jstDow]}
-        </span>
-        <span className="font-semibold">{formatJst(date, 'M/d')}</span>
+      <span
+        className={cn(
+          'text-[10px]',
+          jstDow === 0
+            ? 'text-destructive'
+            : jstDow === 6
+              ? 'text-blue-600'
+              : 'text-muted-foreground',
+        )}
+      >
+        {WEEKDAY_JA[jstDow]}
+      </span>
+      <span className={cn('font-semibold', active && 'text-primary')}>
+        {formatJst(date, 'M/d')}
       </span>
       {/* 工数バー：1日の許容量(480分=8時間)を100%とした棒グラフ。全日共通の
-          高さに100%ラインを重ね、超過している日が一目でわかるようにする。 */}
-      <div className="relative mt-1 h-9 w-full" role="img" aria-label={`この日の工数 ${pct}%`}>
+          高さに100%ラインを重ね、超過している日が一目でわかるようにする。
+          背景に薄いトラックを敷き、バーの伸び具合が見えやすいようにする。 */}
+      <div
+        className="relative h-12 w-full overflow-hidden rounded-md bg-muted"
+        role="img"
+        aria-label={`この日の工数 ${pct}%`}
+      >
         <div
           className={cn(
-            'absolute inset-x-1 bottom-0 rounded-t transition-[height]',
-            overCapacity ? 'bg-destructive' : active ? 'bg-primary-foreground' : 'bg-primary',
+            'absolute inset-x-0 bottom-0 rounded-t transition-[height]',
+            overCapacity ? 'bg-destructive' : 'bg-primary',
           )}
           style={{ height: `${barHeightPct}%` }}
         />
         <div
-          className="pointer-events-none absolute inset-x-0 border-t border-destructive"
+          className="pointer-events-none absolute inset-x-0 border-t-2 border-destructive/70"
           style={{ bottom: `${capacityLinePct}%` }}
         />
       </div>
@@ -254,9 +260,6 @@ export function UpcomingRoute() {
             );
           })}
         </div>
-        <p className="text-center text-[10px] text-muted-foreground">
-          赤線＝1日480分（8時間）の100%ライン
-        </p>
 
         <div className="flex items-baseline justify-between pt-1">
           <h3 className="text-sm font-semibold">{selectedLabel}</h3>
