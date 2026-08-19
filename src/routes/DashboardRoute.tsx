@@ -419,7 +419,8 @@ export function DashboardRoute() {
                   <span className="block">{formatHoursMinutes(c.actualMinutes)}</span>
                   <span className="block text-[10px]">{formatPersonMonths(c.actualMinutes)}</span>
                   <span className="block text-[10px]">
-                    見通し {formatHoursMinutes(c.estimatedMinutes)}
+                    見通し {formatHoursMinutes(c.estimatedMinutes)}（
+                    {formatPersonMonths(c.estimatedMinutes)}）
                   </span>
                 </span>
               </div>
@@ -432,7 +433,8 @@ export function DashboardRoute() {
                   {formatPersonMonths(monthTotalMinutes)}
                 </span>
                 <span className="block text-[10px] font-normal text-muted-foreground">
-                  見通し {formatHoursMinutes(monthTotalEstimatedMinutes)}
+                  見通し {formatHoursMinutes(monthTotalEstimatedMinutes)}（
+                  {formatPersonMonths(monthTotalEstimatedMinutes)}）
                 </span>
               </span>
             </div>
