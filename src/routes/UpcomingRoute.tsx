@@ -64,19 +64,37 @@ function DayButton({ date, dateKey, active, dayMinutes, scaleMinutes, onSelect }
       type="button"
       onClick={onSelect}
       className={cn(
-        'flex flex-1 flex-col items-center gap-1 rounded-lg border p-1.5 text-xs transition-colors',
-        active ? 'border-primary bg-primary/10' : 'border-border bg-card hover:bg-accent',
+        'flex flex-1 flex-col items-center gap-1 rounded-md p-1 text-xs transition-colors hover:bg-accent',
         isOver && 'ring-2 ring-primary ring-offset-1',
       )}
+      aria-label={`${formatJst(date, 'M/d')} この日の工数 ${pct}%`}
     >
+      {/* 工数バー：実績タブの日次稼働推移と同じ「下から積み上がる棒グラフ」。
+          1日の許容量(480分=8時間)＝100%の高さに全日共通の赤線を重ね、
+          超過している日のバーだけが線を越えて伸びて見えるようにする。 */}
+      <div className="relative flex h-16 w-full items-end justify-center">
+        <div
+          className="pointer-events-none absolute inset-x-0 border-t-2 border-destructive/70"
+          style={{ top: `${capacityLineTopPct}%` }}
+        />
+        <div
+          className={cn(
+            'w-full overflow-hidden rounded-t transition-[height]',
+            overCapacity ? 'bg-destructive' : active ? 'bg-primary' : 'bg-muted-foreground/40',
+          )}
+          style={{ height: `${barHeightPct}%` }}
+        />
+      </div>
       <span
         className={cn(
           'text-[10px]',
-          jstDow === 0
-            ? 'text-destructive'
-            : jstDow === 6
-              ? 'text-blue-600'
-              : 'text-muted-foreground',
+          active
+            ? 'font-semibold text-primary'
+            : jstDow === 0
+              ? 'text-destructive'
+              : jstDow === 6
+                ? 'text-blue-600'
+                : 'text-muted-foreground',
         )}
       >
         {WEEKDAY_JA[jstDow]}
@@ -84,26 +102,6 @@ function DayButton({ date, dateKey, active, dayMinutes, scaleMinutes, onSelect }
       <span className={cn('font-semibold', active && 'text-primary')}>
         {formatJst(date, 'M/d')}
       </span>
-      {/* 工数バー：1日の許容量(480分=8時間)を100%とした棒グラフ。全日共通の
-          高さに100%ラインを重ね、超過している日が一目でわかるようにする。
-          背景に薄いトラックを敷き、バーの伸び具合が見えやすいようにする。 */}
-      <div
-        className="relative h-12 w-full overflow-hidden rounded-md bg-muted"
-        role="img"
-        aria-label={`この日の工数 ${pct}%`}
-      >
-        <div
-          className={cn(
-            'absolute inset-x-0 bottom-0 rounded-t transition-[height]',
-            overCapacity ? 'bg-destructive' : 'bg-primary',
-          )}
-          style={{ height: `${barHeightPct}%` }}
-        />
-        <div
-          className="pointer-events-none absolute inset-x-0 border-t-2 border-destructive/70"
-          style={{ top: `${capacityLineTopPct}%` }}
-        />
-      </div>
     </button>
   );
 }
