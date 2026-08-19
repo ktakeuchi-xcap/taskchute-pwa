@@ -31,14 +31,22 @@ interface DayButtonProps {
   dateKey: string;
   active: boolean;
   dayMinutes: number;
+  /** Shared across the whole week strip so every day's bar uses the same
+   * vertical scale (same convention as the 実績 タブ日次稼働推移). */
+  scaleMinutes: number;
   onSelect: () => void;
 }
 
 /** A date in the week strip — also a drop target for dragged tasks. */
-function DayButton({ date, dateKey, active, dayMinutes, onSelect }: DayButtonProps) {
+function DayButton({ date, dateKey, active, dayMinutes, scaleMinutes, onSelect }: DayButtonProps) {
   const { setNodeRef, isOver } = useDroppable({ id: dateKey });
-  const pct = Math.min(100, Math.round((dayMinutes / DAILY_CAPACITY_MINUTES) * 100));
+  const pct = Math.round((dayMinutes / DAILY_CAPACITY_MINUTES) * 100);
   const overCapacity = dayMinutes > DAILY_CAPACITY_MINUTES;
+  const barHeightPct = Math.min(100, Math.round((dayMinutes / scaleMinutes) * 100));
+  // 1日の許容量(480分=8時間)＝100%の高さ位置。週全体で同じscaleMinutesを使う
+  // ため、この線はどの日のバーでも同じ高さに揃い、それを超えている日の
+  // バーだけが線より上まで伸びる。
+  const capacityLinePct = Math.min(100, Math.round((DAILY_CAPACITY_MINUTES / scaleMinutes) * 100));
   // JST-safe day-of-week (0=Sun..6=Sat, matching WEEKDAY_JA/getDay's own
   // convention) — date.getDay() reads the runtime's local timezone, which
   // only happens to agree with JST when the device itself is set to Japan.
@@ -50,38 +58,38 @@ function DayButton({ date, dateKey, active, dayMinutes, onSelect }: DayButtonPro
       type="button"
       onClick={onSelect}
       className={cn(
-        'flex h-14 flex-1 flex-col items-center justify-center rounded-lg border text-xs transition-colors',
+        'flex h-24 flex-1 flex-col items-center justify-between rounded-lg border p-1 text-xs transition-colors',
         active
           ? 'border-primary bg-primary text-primary-foreground'
           : 'border-border bg-card text-foreground hover:bg-accent',
         isOver && 'ring-2 ring-primary ring-offset-1',
       )}
     >
-      <span
-        className={cn(
-          'text-[10px]',
-          !active && jstDow === 0 && 'text-destructive',
-          !active && jstDow === 6 && 'text-blue-600',
-        )}
-      >
-        {WEEKDAY_JA[jstDow]}
+      <span className="flex flex-col items-center">
+        <span
+          className={cn(
+            'text-[10px]',
+            !active && jstDow === 0 && 'text-destructive',
+            !active && jstDow === 6 && 'text-blue-600',
+          )}
+        >
+          {WEEKDAY_JA[jstDow]}
+        </span>
+        <span className="font-semibold">{formatJst(date, 'M/d')}</span>
       </span>
-      <span className="font-semibold">{formatJst(date, 'M/d')}</span>
-      {/* 工数バー：1日の許容量(480分=8時間)を100%とした充填率 */}
-      <div
-        className={cn(
-          'mt-0.5 h-1 w-8 overflow-hidden rounded-full',
-          active ? 'bg-primary-foreground/30' : 'bg-muted',
-        )}
-        role="img"
-        aria-label={`この日の工数 ${pct}%`}
-      >
+      {/* 工数バー：1日の許容量(480分=8時間)を100%とした棒グラフ。全日共通の
+          高さに100%ラインを重ね、超過している日が一目でわかるようにする。 */}
+      <div className="relative mt-1 h-9 w-full" role="img" aria-label={`この日の工数 ${pct}%`}>
         <div
           className={cn(
-            'h-full rounded-full transition-[width]',
+            'absolute inset-x-1 bottom-0 rounded-t transition-[height]',
             overCapacity ? 'bg-destructive' : active ? 'bg-primary-foreground' : 'bg-primary',
           )}
-          style={{ width: `${pct}%` }}
+          style={{ height: `${barHeightPct}%` }}
+        />
+        <div
+          className="pointer-events-none absolute inset-x-0 border-t border-destructive"
+          style={{ bottom: `${capacityLinePct}%` }}
         />
       </div>
     </button>
@@ -128,6 +136,15 @@ export function UpcomingRoute() {
     const containsToday = newDays.some((d) => formatJst(d, 'yyyy-MM-dd') === todayKey);
     setSelectedKey(containsToday ? todayKey : formatJst(newDays[0]!, 'yyyy-MM-dd'));
   };
+
+  // 週7日分の見積分を共通スケールとして使う（実績タブの日次稼働推移と同じ
+  // 「表示範囲内の最大値でスケールを揃える」方式）。全日480分以下なら
+  // スケールは480分のまま＝100%ラインが各バーの天井に来る。
+  const weekDayMinutes = useMemo(
+    () => days.map((d) => sumEstimateMinutes(tasksByDay.get(formatJst(d, 'yyyy-MM-dd')))),
+    [days, tasksByDay],
+  );
+  const scaleMinutes = Math.max(DAILY_CAPACITY_MINUTES, ...weekDayMinutes);
 
   const selectedTasks = tasksByDay.get(selectedKey) ?? [];
   const totalMinutes = sumEstimateMinutes(selectedTasks);
@@ -222,21 +239,24 @@ export function UpcomingRoute() {
         </div>
 
         <div className="flex gap-1.5">
-          {days.map((d) => {
+          {days.map((d, i) => {
             const key = formatJst(d, 'yyyy-MM-dd');
-            const dayMinutes = sumEstimateMinutes(tasksByDay.get(key));
             return (
               <DayButton
                 key={key}
                 date={d}
                 dateKey={key}
                 active={key === selectedKey}
-                dayMinutes={dayMinutes}
+                dayMinutes={weekDayMinutes[i]!}
+                scaleMinutes={scaleMinutes}
                 onSelect={() => setSelectedKey(key)}
               />
             );
           })}
         </div>
+        <p className="text-center text-[10px] text-muted-foreground">
+          赤線＝1日480分（8時間）の100%ライン
+        </p>
 
         <div className="flex items-baseline justify-between pt-1">
           <h3 className="text-sm font-semibold">{selectedLabel}</h3>
