@@ -40,6 +40,7 @@ interface DayButtonProps {
 /** A date in the week strip — also a drop target for dragged tasks. */
 function DayButton({ date, dateKey, active, dayMinutes, scaleMinutes, onSelect }: DayButtonProps) {
   const { setNodeRef, isOver } = useDroppable({ id: dateKey });
+  const [showTooltip, setShowTooltip] = useState(false);
   const pct = Math.round((dayMinutes / DAILY_CAPACITY_MINUTES) * 100);
   const overCapacity = dayMinutes > DAILY_CAPACITY_MINUTES;
   const barHeightPct = Math.min(100, Math.round((dayMinutes / scaleMinutes) * 100));
@@ -63,8 +64,10 @@ function DayButton({ date, dateKey, active, dayMinutes, scaleMinutes, onSelect }
       ref={setNodeRef}
       type="button"
       onClick={onSelect}
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
       className={cn(
-        'flex flex-1 flex-col items-center gap-1 rounded-md p-1 text-xs transition-colors hover:bg-accent',
+        'relative flex flex-1 flex-col items-center gap-1 rounded-md p-1 text-xs transition-colors hover:bg-accent',
         isOver && 'ring-2 ring-primary ring-offset-1',
       )}
       aria-label={`${formatJst(date, 'M/d')} この日の工数 ${pct}%`}
@@ -73,13 +76,18 @@ function DayButton({ date, dateKey, active, dayMinutes, scaleMinutes, onSelect }
           1日の許容量(480分=8時間)＝100%の高さに全日共通の赤線を重ね、
           超過している日のバーだけが線を越えて伸びて見えるようにする。 */}
       <div className="relative flex h-16 w-full items-end justify-center">
+        {showTooltip ? (
+          <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[10px] font-medium text-background shadow-md">
+            {dayMinutes}分（{pct}%）
+          </div>
+        ) : null}
         <div
           className="pointer-events-none absolute inset-x-0 border-t-2 border-destructive/70"
           style={{ top: `${capacityLineTopPct}%` }}
         />
         <div
           className={cn(
-            'w-full overflow-hidden rounded-t transition-[height]',
+            'w-[90%] overflow-hidden rounded-t transition-[height]',
             overCapacity ? 'bg-destructive' : active ? 'bg-primary' : 'bg-muted-foreground/40',
           )}
           style={{ height: `${barHeightPct}%` }}
