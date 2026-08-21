@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { addDays } from 'date-fns';
 import { ChevronLeft, ChevronRight, List, GanttChartSquare } from 'lucide-react';
 import {
@@ -123,6 +123,7 @@ export function UpcomingRoute() {
   const [selectedKey, setSelectedKey] = useState(() => formatJst(new Date(), 'yyyy-MM-dd'));
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('timeline');
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const tasksQuery = useTasks();
   const deleteMutation = useDeleteTask();
@@ -240,6 +241,40 @@ export function UpcomingRoute() {
     });
   };
 
+  // ページ自体（main）ではなく、この下のコンテンツ枠（タイムライン／リスト）
+  // だけがウィンドウの下端までの高さでスクロールするように、実際の描画位置
+  // から高さを実測して固定する。AppShellの外枠は`min-h-dvh`（下限のみ）で
+  // 実際の`height`を持たないため、`h-full`/`flex-1`だけではこのコンテンツ枠
+  // がビューポート高に正しく収まらず、代わりにページ全体（main）がスクロー
+  // ルしてしまっていた。
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+
+    const recompute = () => {
+      // main（AppShellの外枠は高さの下限=min-h-dvhしか持たないため、この
+      // コンテンツ枠の実測前にmain自身のスクロール位置をリセットしておく
+      // ——そうしないと、直前のタブ操作等でmainがスクロールしたままだと
+      // 上端位置の実測がずれ、計算した高さがビューポートより過大/過小になる。
+      const mainEl = el.closest('main');
+      if (mainEl) mainEl.scrollTop = 0;
+      const rect = el.getBoundingClientRect();
+      const navEl = document.querySelector('nav');
+      const navHeight = navEl ? navEl.getBoundingClientRect().height : 0;
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const available = viewportHeight - rect.top - navHeight;
+      el.style.height = `${Math.max(200, available)}px`;
+    };
+
+    recompute();
+    window.addEventListener('resize', recompute);
+    window.visualViewport?.addEventListener('resize', recompute);
+    return () => {
+      window.removeEventListener('resize', recompute);
+      window.visualViewport?.removeEventListener('resize', recompute);
+    };
+  }, [viewMode, tasksQuery.isLoading, tasksQuery.isError]);
+
   return (
     <DndContext
       sensors={sensors}
@@ -355,7 +390,7 @@ export function UpcomingRoute() {
             {tasksQuery.error instanceof Error ? tasksQuery.error.message : '不明なエラー'}
           </div>
         ) : viewMode === 'timeline' ? (
-          <div className="min-h-0 flex-1">
+          <div ref={contentRef} className="min-h-0 flex-1">
             <DayTimeline
               date={selectedDate}
               tasks={selectedTasks}
@@ -363,7 +398,7 @@ export function UpcomingRoute() {
             />
           </div>
         ) : (
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+          <div ref={contentRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto">
             <p className="text-[11px] text-muted-foreground">
               タスクを長押しすると、上の日付にドラッグして移動できます
             </p>
