@@ -122,7 +122,7 @@ export function UpcomingRoute() {
   const days = useMemo(() => buildWeekDays(weekOffset), [weekOffset]);
   const [selectedKey, setSelectedKey] = useState(() => formatJst(new Date(), 'yyyy-MM-dd'));
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>('timeline');
 
   const tasksQuery = useTasks();
   const deleteMutation = useDeleteTask();
@@ -319,19 +319,6 @@ export function UpcomingRoute() {
         <div className="flex flex-shrink-0 gap-1 rounded-lg bg-muted p-1">
           <button
             type="button"
-            onClick={() => setViewMode('list')}
-            className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium transition-colors',
-              viewMode === 'list'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            <List className="h-3.5 w-3.5" />
-            リスト
-          </button>
-          <button
-            type="button"
             onClick={() => setViewMode('timeline')}
             className={cn(
               'flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium transition-colors',
@@ -342,6 +329,19 @@ export function UpcomingRoute() {
           >
             <GanttChartSquare className="h-3.5 w-3.5" />
             タイムライン
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('list')}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium transition-colors',
+              viewMode === 'list'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <List className="h-3.5 w-3.5" />
+            リスト
           </button>
         </div>
 
