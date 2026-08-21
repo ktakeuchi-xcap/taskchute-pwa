@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { addDays } from 'date-fns';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, List, GanttChartSquare } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
@@ -18,9 +18,10 @@ import { useTasks } from '@/features/tasks/hooks/useTasks';
 import { useDeleteTask, useUpdateTask } from '@/features/tasks/hooks/useTaskMutations';
 import { TaskList } from '@/features/tasks/components/TaskList';
 import { DayTimeline } from '@/features/tasks/components/DayTimeline';
-import { taskRowElementId } from '@/features/tasks/taskDom';
 import { DAILY_CAPACITY_MINUTES, sumEstimateMinutes } from '@/features/tasks/workload';
 import type { Task } from '@/features/tasks/types';
+
+type ViewMode = 'list' | 'timeline';
 
 /** Monday..Sunday for "this week + weekOffset weeks" (0 = the week containing today). */
 function buildWeekDays(weekOffset: number): Date[] {
@@ -121,7 +122,7 @@ export function UpcomingRoute() {
   const days = useMemo(() => buildWeekDays(weekOffset), [weekOffset]);
   const [selectedKey, setSelectedKey] = useState(() => formatJst(new Date(), 'yyyy-MM-dd'));
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
-  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   const tasksQuery = useTasks();
   const deleteMutation = useDeleteTask();
@@ -176,15 +177,6 @@ export function UpcomingRoute() {
   const weekEnd = days[6]!;
   const weekRangeLabel = `${formatJst(weekStart, 'M/d')}〜${formatJst(weekEnd, 'M/d')}`;
 
-  // タイムラインのブロックをタップしたら、下の一覧の該当行までスクロールして
-  // 縁取りでハイライトする（編集・削除・タグ付けの操作自体は一覧側に残す）。
-  const handleSelectTask = (taskId: string) => {
-    setHighlightedTaskId(taskId);
-    document
-      .getElementById(taskRowElementId(taskId))
-      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
-
   const handleDragStart = (event: DragStartEvent) => {
     const task = event.active.data.current?.task as Task | undefined;
     setDraggedTask(task ?? null);
@@ -224,6 +216,30 @@ export function UpcomingRoute() {
     });
   };
 
+  // タイムライン上でタスクを縦にドラッグしたときの時刻変更（同じ日のまま、
+  // 見積分数＝所要時間は変えず開始時刻だけを移動する）。
+  const handleReschedule = (task: Task, minutesOfDay: number) => {
+    const hour = Math.floor(minutesOfDay / 60);
+    const minute = minutesOfDay % 60;
+    const newStart = jstDate(
+      Number(formatJst(task.scheduledStartTime, 'yyyy')),
+      Number(formatJst(task.scheduledStartTime, 'M')),
+      Number(formatJst(task.scheduledStartTime, 'd')),
+      hour,
+      minute,
+    );
+    if (newStart.getTime() === task.scheduledStartTime.getTime()) return; // 元の時刻のまま離した場合は何もしない
+    updateMutation.mutate({
+      taskId: task.taskId,
+      input: {
+        taskName: task.taskName,
+        estimateMinutes: task.estimateMinutes,
+        category: task.category ?? undefined,
+        startTime: newStart,
+      },
+    });
+  };
+
   return (
     <DndContext
       sensors={sensors}
@@ -237,12 +253,12 @@ export function UpcomingRoute() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="space-y-3 p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+        <h2 className="flex-shrink-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           予定
         </h2>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-shrink-0 items-center justify-between">
           <button
             type="button"
             aria-label="前週へ"
@@ -268,7 +284,7 @@ export function UpcomingRoute() {
           </button>
         </div>
 
-        <div className="flex gap-1.5">
+        <div className="flex flex-shrink-0 gap-1.5">
           {days.map((d, i) => {
             const key = formatJst(d, 'yyyy-MM-dd');
             return (
@@ -285,7 +301,7 @@ export function UpcomingRoute() {
           })}
         </div>
 
-        <div className="flex items-baseline justify-between pt-1">
+        <div className="flex flex-shrink-0 items-baseline justify-between pt-1">
           <h3 className="text-sm font-semibold">{selectedLabel}</h3>
           {selectedTasks.length > 0 ? (
             <p
@@ -299,23 +315,55 @@ export function UpcomingRoute() {
           ) : null}
         </div>
 
+        {/* リスト／タイムライン切り替え（下部のタブナビとは別の、ページ内タブ） */}
+        <div className="flex flex-shrink-0 gap-1 rounded-lg bg-muted p-1">
+          <button
+            type="button"
+            onClick={() => setViewMode('list')}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium transition-colors',
+              viewMode === 'list'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <List className="h-3.5 w-3.5" />
+            リスト
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('timeline')}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium transition-colors',
+              viewMode === 'timeline'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <GanttChartSquare className="h-3.5 w-3.5" />
+            タイムライン
+          </button>
+        </div>
+
         {tasksQuery.isLoading ? (
-          <div className="rounded-lg border border-dashed border-border bg-card/40 p-6 text-center text-sm text-muted-foreground">
+          <div className="flex-shrink-0 rounded-lg border border-dashed border-border bg-card/40 p-6 text-center text-sm text-muted-foreground">
             読み込み中…
           </div>
         ) : tasksQuery.isError ? (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <div className="flex-shrink-0 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
             タスクの読み込みに失敗しました：
             {tasksQuery.error instanceof Error ? tasksQuery.error.message : '不明なエラー'}
           </div>
-        ) : (
-          <>
+        ) : viewMode === 'timeline' ? (
+          <div className="min-h-0 flex-1">
             <DayTimeline
               date={selectedDate}
               tasks={selectedTasks}
-              selectedTaskId={highlightedTaskId}
-              onSelectTask={handleSelectTask}
+              onReschedule={handleReschedule}
             />
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
             <p className="text-[11px] text-muted-foreground">
               タスクを長押しすると、上の日付にドラッグして移動できます
             </p>
@@ -326,9 +374,8 @@ export function UpcomingRoute() {
               isDeleting={deleteMutation.isPending}
               emptyMessage="この日の予定はまだありません"
               draggable
-              highlightedTaskId={highlightedTaskId}
             />
-          </>
+          </div>
         )}
       </div>
 
