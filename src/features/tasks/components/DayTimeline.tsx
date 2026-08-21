@@ -94,13 +94,16 @@ export function DayTimeline({ date, tasks, onReschedule }: DayTimelineProps) {
   const nowMinutes = Number(formatJst(now, 'H')) * 60 + Number(formatJst(now, 'm'));
 
   // Auto-scroll to a sensible start each time the selected day changes:
-  // today scrolls to "now" (with an hour of context above it), other days
-  // scroll to their earliest task, and an empty day falls back to 7:00.
+  // today scrolls to 4 hours before now (so the current moment sits well
+  // below the top edge instead of right at it), other days scroll to an
+  // hour before their earliest task, and an empty day falls back to 7:00.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const targetHour = isToday ? nowMinutes / 60 : (earliestStartHour ?? DEFAULT_SCROLL_HOUR);
-    el.scrollTop = Math.max(0, (targetHour - 1) * HOUR_HEIGHT_PX);
+    const targetHour = isToday
+      ? nowMinutes / 60 - 4
+      : (earliestStartHour ?? DEFAULT_SCROLL_HOUR) - 1;
+    el.scrollTop = Math.max(0, targetHour * HOUR_HEIGHT_PX);
     // Only re-run when the day itself changes — re-scrolling on every
     // now/task-list tick would fight the user's own scroll position.
     // eslint-disable-next-line react-hooks/exhaustive-deps
