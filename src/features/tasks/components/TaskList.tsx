@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { cn } from '@/lib/utils';
 import { TaskRow } from './TaskRow';
 import { DraggableTaskRow } from './DraggableTaskRow';
 import { EditTaskForm } from './EditTaskForm';
 import { SetMeetingCategoryForm } from './SetMeetingCategoryForm';
 import { SetMeetingWorkloadForm } from './SetMeetingWorkloadForm';
 import { isAllDayMeeting } from '@/features/tasks/meetingStatus';
+import { taskRowElementId } from '@/features/tasks/taskDom';
 import { TaskSource, type Task } from '@/features/tasks/types';
 
 interface TaskListProps {
@@ -15,6 +17,8 @@ interface TaskListProps {
   emptyMessage?: string;
   /** When true, each row can be dragged (e.g. onto a date in 予定's day strip). */
   draggable?: boolean;
+  /** Highlighted (e.g. tapped on DayTimeline) — gets a ring and its row id is scroll-targetable via taskRowElementId. */
+  highlightedTaskId?: string | null;
 }
 
 /** All-day meetings float to the top; everything else keeps its given order. */
@@ -29,6 +33,7 @@ export function TaskList({
   isDeleting = false,
   emptyMessage = '本日のタスクはまだありません',
   draggable = false,
+  highlightedTaskId = null,
 }: TaskListProps) {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [taggingTaskId, setTaggingTaskId] = useState<string | null>(null);
@@ -43,50 +48,53 @@ export function TaskList({
   }
   return (
     <div className="space-y-2">
-      {sortForDisplay(tasks).map((task) =>
-        editingTaskId === task.taskId ? (
-          <EditTaskForm
-            key={task.taskId}
-            task={task}
-            onCancel={() => setEditingTaskId(null)}
-            onSaved={() => setEditingTaskId(null)}
-          />
-        ) : taggingTaskId === task.taskId ? (
-          <SetMeetingCategoryForm
-            key={task.taskId}
-            task={task}
-            onCancel={() => setTaggingTaskId(null)}
-            onSaved={() => setTaggingTaskId(null)}
-          />
-        ) : workloadTaskId === task.taskId ? (
-          <SetMeetingWorkloadForm
-            key={task.taskId}
-            task={task}
-            onCancel={() => setWorkloadTaskId(null)}
-            onSaved={() => setWorkloadTaskId(null)}
-          />
-        ) : draggable && task.source !== TaskSource.Meeting ? (
-          <DraggableTaskRow
-            key={task.taskId}
-            task={task}
-            isNext={task.taskId === nextTaskId}
-            onDelete={onDelete}
-            isDeleting={isDeleting}
-            onEdit={() => setEditingTaskId(task.taskId)}
-          />
-        ) : (
-          <TaskRow
-            key={task.taskId}
-            task={task}
-            isNext={task.taskId === nextTaskId}
-            onDelete={onDelete}
-            isDeleting={isDeleting}
-            onEdit={() => setEditingTaskId(task.taskId)}
-            onTagCategory={() => setTaggingTaskId(task.taskId)}
-            onSetWorkload={() => setWorkloadTaskId(task.taskId)}
-          />
-        ),
-      )}
+      {sortForDisplay(tasks).map((task) => (
+        <div
+          key={task.taskId}
+          id={taskRowElementId(task.taskId)}
+          className={cn(
+            highlightedTaskId === task.taskId && 'rounded-lg ring-2 ring-primary ring-offset-1',
+          )}
+        >
+          {editingTaskId === task.taskId ? (
+            <EditTaskForm
+              task={task}
+              onCancel={() => setEditingTaskId(null)}
+              onSaved={() => setEditingTaskId(null)}
+            />
+          ) : taggingTaskId === task.taskId ? (
+            <SetMeetingCategoryForm
+              task={task}
+              onCancel={() => setTaggingTaskId(null)}
+              onSaved={() => setTaggingTaskId(null)}
+            />
+          ) : workloadTaskId === task.taskId ? (
+            <SetMeetingWorkloadForm
+              task={task}
+              onCancel={() => setWorkloadTaskId(null)}
+              onSaved={() => setWorkloadTaskId(null)}
+            />
+          ) : draggable && task.source !== TaskSource.Meeting ? (
+            <DraggableTaskRow
+              task={task}
+              isNext={task.taskId === nextTaskId}
+              onDelete={onDelete}
+              isDeleting={isDeleting}
+              onEdit={() => setEditingTaskId(task.taskId)}
+            />
+          ) : (
+            <TaskRow
+              task={task}
+              isNext={task.taskId === nextTaskId}
+              onDelete={onDelete}
+              isDeleting={isDeleting}
+              onEdit={() => setEditingTaskId(task.taskId)}
+              onTagCategory={() => setTaggingTaskId(task.taskId)}
+              onSetWorkload={() => setWorkloadTaskId(task.taskId)}
+            />
+          )}
+        </div>
+      ))}
     </div>
   );
 }

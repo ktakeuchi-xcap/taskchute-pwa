@@ -36,6 +36,11 @@ export function jstIsoDayOfWeek(date: Date): number {
   return Number(formatJst(date, 'i'));
 }
 
+/** Minutes since JST midnight (0..1439) — used to position events on a day timeline. */
+export function jstMinutesOfDay(date: Date): number {
+  return Number(formatJst(date, 'H')) * 60 + Number(formatJst(date, 'm'));
+}
+
 /** The Monday (JST calendar date) of the week containing `date`. */
 export function startOfJstWeek(date: Date): Date {
   return addDays(date, -(jstIsoDayOfWeek(date) - 1));

@@ -17,6 +17,8 @@ import { formatJst, jstDate, jstIsoDayOfWeek, startOfJstWeek, WEEKDAY_JA } from 
 import { useTasks } from '@/features/tasks/hooks/useTasks';
 import { useDeleteTask, useUpdateTask } from '@/features/tasks/hooks/useTaskMutations';
 import { TaskList } from '@/features/tasks/components/TaskList';
+import { DayTimeline } from '@/features/tasks/components/DayTimeline';
+import { taskRowElementId } from '@/features/tasks/taskDom';
 import { DAILY_CAPACITY_MINUTES, sumEstimateMinutes } from '@/features/tasks/workload';
 import type { Task } from '@/features/tasks/types';
 
@@ -119,6 +121,7 @@ export function UpcomingRoute() {
   const days = useMemo(() => buildWeekDays(weekOffset), [weekOffset]);
   const [selectedKey, setSelectedKey] = useState(() => formatJst(new Date(), 'yyyy-MM-dd'));
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
 
   const tasksQuery = useTasks();
   const deleteMutation = useDeleteTask();
@@ -172,6 +175,15 @@ export function UpcomingRoute() {
   const weekStart = days[0]!;
   const weekEnd = days[6]!;
   const weekRangeLabel = `${formatJst(weekStart, 'M/d')}〜${formatJst(weekEnd, 'M/d')}`;
+
+  // タイムラインのブロックをタップしたら、下の一覧の該当行までスクロールして
+  // 縁取りでハイライトする（編集・削除・タグ付けの操作自体は一覧側に残す）。
+  const handleSelectTask = (taskId: string) => {
+    setHighlightedTaskId(taskId);
+    document
+      .getElementById(taskRowElementId(taskId))
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
 
   const handleDragStart = (event: DragStartEvent) => {
     const task = event.active.data.current?.task as Task | undefined;
@@ -298,6 +310,12 @@ export function UpcomingRoute() {
           </div>
         ) : (
           <>
+            <DayTimeline
+              date={selectedDate}
+              tasks={selectedTasks}
+              selectedTaskId={highlightedTaskId}
+              onSelectTask={handleSelectTask}
+            />
             <p className="text-[11px] text-muted-foreground">
               タスクを長押しすると、上の日付にドラッグして移動できます
             </p>
@@ -308,6 +326,7 @@ export function UpcomingRoute() {
               isDeleting={deleteMutation.isPending}
               emptyMessage="この日の予定はまだありません"
               draggable
+              highlightedTaskId={highlightedTaskId}
             />
           </>
         )}
