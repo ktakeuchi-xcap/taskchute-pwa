@@ -30,6 +30,15 @@ export interface TaskRepository {
   addCategory(name: string, color: string): Promise<void>;
   updateCategory(oldName: string, newName: string, color: string): Promise<void>;
   deleteCategory(name: string): Promise<void>;
+  /**
+   * Rewrite the whole 案件マスタ (Settings!A2:B) in exactly the given name
+   * order — this is what drives the display order everywhere a category
+   * list is shown (the master list itself, and the 案件 select in
+   * add/edit task forms). `names` must be a permutation of the current
+   * category names (same set, no additions/removals — use
+   * add/update/deleteCategory for those).
+   */
+  reorderCategories(names: string[]): Promise<void>;
   addTask(input: TaskInput): Promise<Task>;
   updateTask(taskId: string, input: TaskInput): Promise<Task>;
   startTask(taskId: string): Promise<Task>;
@@ -156,6 +165,27 @@ export function createTaskRepository(deps: TaskRepositoryDeps): TaskRepository {
         spreadsheetId,
         `${SETTINGS_SHEET}!A${rowIndex + 1}:B${rowIndex + 1}`,
         [[newName, color]],
+      );
+    },
+
+    async reorderCategories(names) {
+      const values = await sheets.getValues(spreadsheetId, `${SETTINGS_SHEET}!A2:B`);
+      const colorByName = new Map<string, string>();
+      for (const row of values) {
+        const rowName = row[0];
+        if (typeof rowName !== 'string' || rowName.length === 0) continue;
+        const color = row[1];
+        colorByName.set(rowName, typeof color === 'string' ? color : '');
+      }
+      const isSameSet = names.length === colorByName.size && names.every((n) => colorByName.has(n));
+      if (!isSameSet) {
+        throw new Error('reorderCategories: names must match the current category master exactly');
+      }
+      const reordered = names.map((n) => [n, colorByName.get(n) ?? '']);
+      await sheets.updateRange(
+        spreadsheetId,
+        `${SETTINGS_SHEET}!A2:B${reordered.length + 1}`,
+        reordered,
       );
     },
 

@@ -34,6 +34,18 @@ export function useUpdateCategory() {
   });
 }
 
+export function useReorderCategories() {
+  const repo = useTaskRepository();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (names: string[]) => {
+      if (!repo) throw new Error('repository unavailable');
+      return repo.reorderCategories(names);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: CATEGORIES_QUERY_KEY }),
+  });
+}
+
 export function useDeleteCategory() {
   const repo = useTaskRepository();
   const qc = useQueryClient();

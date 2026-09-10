@@ -521,6 +521,47 @@ describe('TaskRepository', () => {
     ]);
   });
 
+  it('reorderCategories rewrites Settings!A2:B in the given name order, preserving colors', async () => {
+    const sheets = createMockSheets({
+      TaskDB: [HEADER],
+      Settings: [['header'], ['管理', 'blue'], ['営業', 'red'], ['開発', 'green']],
+    });
+    const calendar = createMockCalendar();
+    const repo = createTaskRepository({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+    });
+    await repo.reorderCategories(['開発', '管理', '営業']);
+    expect(sheets.updateCalls).toEqual([
+      {
+        range: 'Settings!A2:B4',
+        values: [
+          ['開発', 'green'],
+          ['管理', 'blue'],
+          ['営業', 'red'],
+        ],
+      },
+    ]);
+  });
+
+  it('reorderCategories rejects a name list that does not match the current master exactly', async () => {
+    const sheets = createMockSheets({
+      TaskDB: [HEADER],
+      Settings: [['header'], ['管理', 'blue'], ['営業', 'red']],
+    });
+    const calendar = createMockCalendar();
+    const repo = createTaskRepository({
+      sheets,
+      calendar,
+      spreadsheetId: 'sid',
+      calendarId: 'cid',
+    });
+    // Missing '営業' and includes a name that doesn't exist.
+    await expect(repo.reorderCategories(['管理', '存在しない'])).rejects.toThrowError(/must match/);
+  });
+
   it('throws when updating a non-existent category', async () => {
     const sheets = createMockSheets({
       TaskDB: [HEADER],

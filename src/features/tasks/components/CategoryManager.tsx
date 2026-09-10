@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,6 +7,7 @@ import { useCategories } from '@/features/tasks/hooks/useCategories';
 import {
   useAddCategory,
   useDeleteCategory,
+  useReorderCategories,
   useUpdateCategory,
 } from '@/features/tasks/hooks/useCategoryMutations';
 import { DEFAULT_CATEGORY_COLOR } from '@/features/tasks/categoryColors';
@@ -26,8 +27,20 @@ export function CategoryManager() {
   const addMutation = useAddCategory();
   const updateMutation = useUpdateCategory();
   const deleteMutation = useDeleteCategory();
+  const reorderMutation = useReorderCategories();
 
   const categoryNames = (categoriesQuery.data ?? []).map((c) => c.name);
+
+  // ここでの並び順が、新規タスク作成・編集画面の「案件」選択肢の並び順に
+  // そのまま反映される（listCategories/reorderCategoriesがSettingsシートの
+  // 行順をそのまま返す実装のため）。
+  const moveCategory = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= categoryNames.length) return;
+    const reordered = [...categoryNames];
+    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex]!, reordered[index]!];
+    reorderMutation.mutate(reordered);
+  };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -90,7 +103,7 @@ export function CategoryManager() {
         {(categoriesQuery.data ?? []).length === 0 ? (
           <p className="text-xs text-muted-foreground">まだ登録されていません</p>
         ) : (
-          (categoriesQuery.data ?? []).map((c) =>
+          (categoriesQuery.data ?? []).map((c, index) =>
             editingCategory === c.name ? (
               <div
                 key={c.name}
@@ -131,6 +144,28 @@ export function CategoryManager() {
               >
                 <CategoryTag name={c.name} colorKey={c.color} />
                 <div className="flex flex-shrink-0 items-center">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    aria-label={`${c.name}を上へ`}
+                    onClick={() => moveCategory(index, -1)}
+                    disabled={index === 0 || reorderMutation.isPending}
+                  >
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    aria-label={`${c.name}を下へ`}
+                    onClick={() => moveCategory(index, 1)}
+                    disabled={index === categoryNames.length - 1 || reorderMutation.isPending}
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"
