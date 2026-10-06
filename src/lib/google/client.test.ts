@@ -167,6 +167,48 @@ describe('GoogleAuthClient', () => {
     expect(client.getState().status).toBe('unauthenticated');
   });
 
+  it('falls back to unauthenticated if a silent request never calls back (GIS hang)', async () => {
+    vi.useFakeTimers();
+    const { client, gis } = setup();
+    const promise = client.ensureToken({ forceRefresh: true });
+    // Attach the rejection expectation before anything can actually reject
+    // the promise — with fake timers, advancing past the point of rejection
+    // before a handler is attached trips an "unhandled rejection" even
+    // though this same `await` ultimately observes it.
+    const rejection = expect(promise).rejects.toBeInstanceOf(AuthRequiredError);
+    // Let the GIS script "load" (a resolved promise in this mock) and the
+    // actual requestAccessToken call happen, without ever triggering its
+    // callback — simulating the hang this timeout exists to recover from.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(gis.requestCalls).toEqual([{ prompt: 'none' }]);
+
+    await vi.advanceTimersByTimeAsync(8_000);
+    await rejection;
+    expect(client.getState().status).toBe('unauthenticated');
+  });
+
+  it('does not time out an interactive signIn the same way', async () => {
+    vi.useFakeTimers();
+    const { client, gis } = setup();
+    const promise = client.signIn();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(gis.requestCalls).toEqual([{ prompt: '' }]);
+
+    // Well past the silent-request timeout — an interactive request (a real
+    // user present at a popup) must not be auto-rejected the same way.
+    await vi.advanceTimersByTimeAsync(60_000);
+    let settled = false;
+    void promise.then(
+      () => (settled = true),
+      () => (settled = true),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+
+    gis.triggerCallback({ access_token: 'late-token', expires_in: 3600 });
+    await expect(promise).resolves.toBe('late-token');
+  });
+
   it('error_callback rejects in-flight signIn with AuthDeniedError', async () => {
     const { client, gis } = setup();
     const promise = client.signIn();

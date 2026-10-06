@@ -49,6 +49,16 @@ export function getScopes(): string {
 
 const TOKEN_STORAGE_KEY = 'taskchute.auth.token';
 const TOKEN_EXPIRY_SAFETY_MS = 60_000;
+// A silent (prompt:'none') token request normally resolves within ~1-2s via
+// GIS's hidden iframe — but if the browser blocks that iframe's third-party
+// cookie access (e.g. Safari/WebKit ITP having purged the Google session
+// cookie after a long stretch of not using the app, or a Chrome
+// third-party-cookie restriction), GIS can simply never call back at all
+// (neither success nor error_callback) instead of cleanly failing. Without
+// this timeout that leaves AuthGate's spinner spinning forever with no way
+// to reach the manual sign-in button. 8s is generous slack over the normal
+// round-trip while still failing fast enough to be noticed.
+const SILENT_TOKEN_TIMEOUT_MS = 8_000;
 const USERINFO_ENDPOINT = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
 interface StoredToken {
@@ -229,20 +239,41 @@ class GoogleAuthClient implements AuthClient {
       resolveFn = resolve;
       rejectFn = reject;
     });
-    this.inflight = {
+    const inflight = {
       promise,
       resolve: resolveFn,
       reject: rejectFn,
       interactive: options.interactive,
     };
+    this.inflight = inflight;
     this.setState({ status: 'authenticating', error: null });
+
+    // Silent (non-interactive) requests can go unanswered forever instead of
+    // cleanly erroring (see SILENT_TOKEN_TIMEOUT_MS) — this covers the whole
+    // attempt (GIS script load included), not just the requestAccessToken
+    // call itself, since a hung script load would hang just as silently.
+    let timeoutId: number | null = null;
+    if (!options.interactive) {
+      timeoutId = window.setTimeout(() => {
+        if (this.inflight !== inflight) return; // already settled by a real callback
+        this.handleTokenResponse({ error: 'login_required' });
+      }, SILENT_TOKEN_TIMEOUT_MS);
+      // .finally()'s returned promise adopts promise's rejection — caught
+      // here (not propagated) since this chain exists purely for the timer
+      // cleanup side effect; the original `promise` is still returned to
+      // the real caller below for them to handle.
+      void promise
+        .finally(() => {
+          if (timeoutId != null) window.clearTimeout(timeoutId);
+        })
+        .catch(() => {});
+    }
 
     void (async () => {
       try {
         await this.ensureInitialized();
         if (!this.tokenClient) throw new Error('Token client not initialized');
-        const inflight = this.inflight;
-        if (!inflight) return; // signOut or another caller cleared us
+        if (this.inflight !== inflight) return; // signOut, or the silent timeout already fired
         this.tokenClient.requestAccessToken({ prompt: inflight.interactive ? '' : 'none' });
       } catch (err) {
         const current = this.inflight;

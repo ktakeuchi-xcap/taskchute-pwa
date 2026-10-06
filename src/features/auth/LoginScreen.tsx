@@ -66,7 +66,7 @@ export function LoginScreen() {
             <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
               Spreadsheets / Calendar / Tasks のスコープを要求します。
               <br />
-              アクセストークンはこのタブが開いている間のみ保管されます。
+              サインイン状態はこの端末に保存され、タブ・アプリを閉じても保持されます。
             </p>
           </>
         )}
